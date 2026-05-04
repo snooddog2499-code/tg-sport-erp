@@ -7,11 +7,7 @@ import { canTransition, type OrderStatus } from "@/lib/order-state";
 import { logAction } from "@/lib/audit";
 import { getCurrentUserId } from "@/lib/session";
 import { requirePerm } from "@/lib/permissions";
-import {
-  saveOrderFile,
-  ORDER_FILE_ACCEPT,
-  MAX_ORDER_FILE_SIZE,
-} from "@/lib/uploads";
+import { ORDER_FILE_ACCEPT } from "@/lib/uploads";
 import { computeOrderTotals, bigSizeQtyFromBreakdown, BIG_SIZE_SURCHARGE } from "@/lib/order-totals";
 import { getCurrentUser } from "@/lib/auth";
 import { and, eq } from "drizzle-orm";
@@ -25,6 +21,12 @@ const OrderCreateSchema = z.object({
     .optional()
     .transform((v) => (typeof v === "number" ? v : undefined)),
   customerName: z.string().min(1, "กรุณาระบุชื่อลูกค้า").transform((s) => s.trim()),
+  customerPhone: z.string().optional().transform((s) => s?.trim() || undefined),
+  customerEmail: z
+    .union([z.literal(""), z.string().email("อีเมลไม่ถูกต้อง")])
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  customerAddress: z.string().optional().transform((s) => s?.trim() || undefined),
   garmentType: z.string().min(1, "เลือกประเภทเสื้อ"),
   collar: z.string().optional(),
   qty: z.coerce.number().int().min(5, "ขั้นต่ำ 5 ตัว"),
@@ -100,7 +102,13 @@ export async function createOrder(
     } else {
       const [created] = await db
         .insert(schema.customers)
-        .values({ name: trimmed, tier: "new" })
+        .values({
+          name: trimmed,
+          tier: "new",
+          phone: parsed.data.customerPhone ?? null,
+          email: parsed.data.customerEmail ?? null,
+          address: parsed.data.customerAddress ?? null,
+        })
         .returning({ id: schema.customers.id });
       customerId = created.id;
       await logAction({
@@ -108,7 +116,13 @@ export async function createOrder(
         action: "create",
         entity: "customer",
         entityId: customerId,
-        details: { name: trimmed, via: "order_form" },
+        details: {
+          name: trimmed,
+          phone: parsed.data.customerPhone ?? null,
+          email: parsed.data.customerEmail ?? null,
+          address: parsed.data.customerAddress ?? null,
+          via: "order_form",
+        },
       });
     }
   }
@@ -225,19 +239,25 @@ export async function createOrder(
     }))
   );
 
-  const attachments = formData
-    .getAll("attachments")
-    .filter((v): v is File => v instanceof File && v.size > 0);
-  for (const file of attachments) {
-    if (file.size > MAX_ORDER_FILE_SIZE) continue;
-    if (!ORDER_FILE_ACCEPT.includes(file.type)) continue;
-    const { publicUrl } = await saveOrderFile(order.id, file);
+  // Files were already uploaded directly to Supabase Storage from the
+  // browser via signed URLs (see AttachmentUploader). The form sends us
+  // the resulting public URLs + metadata as parallel hidden inputs.
+  const urls = formData.getAll("attachmentUrls").map(String).filter(Boolean);
+  const names = formData.getAll("attachmentNames").map(String);
+  const mimes = formData.getAll("attachmentMimes").map(String);
+  const sizes = formData
+    .getAll("attachmentSizes")
+    .map((v) => Number(v) || 0);
+
+  for (let i = 0; i < urls.length; i++) {
+    const mime = mimes[i] ?? "";
+    if (mime && !ORDER_FILE_ACCEPT.includes(mime)) continue;
     await db.insert(schema.orderFiles).values({
       orderId: order.id,
-      fileUrl: publicUrl,
-      fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
+      fileUrl: urls[i],
+      fileName: names[i] ?? "file",
+      mimeType: mime || "application/octet-stream",
+      sizeBytes: sizes[i] ?? 0,
       uploadedBy: userId ?? null,
     });
   }
@@ -252,7 +272,7 @@ export async function createOrder(
       customerId,
       qty,
       dealerId,
-      attachments: attachments.length,
+      attachments: urls.length,
     },
   });
 

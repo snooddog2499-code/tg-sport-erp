@@ -2,13 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["postgres"],
-  // Server Actions ship FormData (incl. uploaded files) through Next's
-  // RPC layer. Default cap is 1 MB which silently rejects most phone
-  // photos. We accept up to 20 MB per file (MAX_ORDER_FILE_SIZE), so
-  // bump the limit accordingly to cover one or two large attachments.
+  // Server Actions only carry small JSON/text payloads now — files
+  // upload to Supabase Storage directly from the browser via signed
+  // URLs (see src/components/AttachmentUploader.tsx). The default 1 MB
+  // is plenty for form metadata, but we keep a conservative 4 MB to
+  // accommodate large item lists or many sized breakdowns.
   experimental: {
     serverActions: {
-      bodySizeLimit: "25mb",
+      bodySizeLimit: "4mb",
     },
   },
   images: {

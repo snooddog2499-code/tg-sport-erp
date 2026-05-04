@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createOrder, type OrderFormState } from "@/actions/orders";
 import { settings } from "@/lib/settings";
+import AttachmentUploader from "@/components/AttachmentUploader";
 
 type CustomerOption = {
   id: number;
@@ -586,39 +587,7 @@ export default function NewOrderForm({
       </Field>
 
       <Field label="ไฟล์แนบ (รูปอ้างอิง, โลโก้, PDF) — ไม่บังคับ">
-        <input
-          name="attachments"
-          type="file"
-          multiple
-          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            const tooBig = files.filter((f) => f.size > 20 * 1024 * 1024);
-            const totalMb =
-              files.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
-            if (tooBig.length > 0) {
-              alert(
-                `ไฟล์ใหญ่เกิน 20 MB:\n${tooBig
-                  .map(
-                    (f) => `• ${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`
-                  )
-                  .join("\n")}\n\nกรุณาย่อรูปก่อนอัปโหลด`
-              );
-              e.target.value = "";
-              return;
-            }
-            if (totalMb > 24) {
-              alert(
-                `รวมไฟล์ทั้งหมด ${totalMb.toFixed(1)} MB เกิน 24 MB — กรุณาแบ่งอัปโหลดทีละน้อยลง หรือย่อรูป`
-              );
-              e.target.value = "";
-            }
-          }}
-          className="block w-full text-sm text-zinc-700 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-zinc-900 file:text-white hover:file:bg-zinc-800 file:cursor-pointer"
-        />
-        <p className="text-[11px] text-zinc-500 mt-1">
-          เลือกได้หลายไฟล์ · สูงสุด 20 MB/ไฟล์ · รวมทั้งหมดไม่เกิน 24 MB · รองรับรูปภาพ, PDF, Word, Excel
-        </p>
+        <AttachmentUploader name="attachment" />
       </Field>
 
       <div className="flex items-center gap-3 pt-2">
