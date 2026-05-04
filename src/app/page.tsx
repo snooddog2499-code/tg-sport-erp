@@ -47,6 +47,15 @@ const stageTone: Record<ProductionStage, string> = {
   ship: "bg-zinc-100 text-zinc-700",
 };
 
+type RangeKey = "today" | "week" | "30d" | "day";
+
+const RANGE_LABELS: Record<RangeKey, string> = {
+  today: "วันนี้",
+  week: "สัปดาห์นี้",
+  "30d": "30 วันที่ผ่านมา",
+  day: "เลือกวัน",
+};
+
 function parseDateParam(s: string | undefined): Date {
   if (!s) {
     const now = new Date();
@@ -73,40 +82,127 @@ function shiftDateParam(date: Date, days: number): string {
   return formatLocalYmd(d);
 }
 
+// Compute [start, end) range. End is exclusive.
+function computeRange(
+  range: RangeKey,
+  selectedDate: Date
+): { start: Date; end: Date; label: string; isFuture: boolean } {
+  const now = new Date();
+  const todayLocal = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+  const tomorrow = new Date(todayLocal);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (range === "today") {
+    return {
+      start: todayLocal,
+      end: tomorrow,
+      label: todayLocal.toLocaleDateString("th-TH", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+      isFuture: false,
+    };
+  }
+
+  if (range === "week") {
+    // Monday-based week (Thai/ISO convention)
+    const dow = todayLocal.getDay(); // 0=Sun..6=Sat
+    const daysSinceMon = (dow + 6) % 7; // Mon=0..Sun=6
+    const weekStart = new Date(todayLocal);
+    weekStart.setDate(weekStart.getDate() - daysSinceMon);
+    return {
+      start: weekStart,
+      end: tomorrow,
+      label: `${weekStart.toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+      })} – ${todayLocal.toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })}`,
+      isFuture: false,
+    };
+  }
+
+  if (range === "30d") {
+    const start = new Date(todayLocal);
+    start.setDate(start.getDate() - 29); // include today = 30 days
+    return {
+      start,
+      end: tomorrow,
+      label: `${start.toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+      })} – ${todayLocal.toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })}`,
+      isFuture: false,
+    };
+  }
+
+  // range === "day" — single chosen date
+  const dayStart = new Date(selectedDate);
+  const dayEnd = new Date(selectedDate);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  return {
+    start: dayStart,
+    end: dayEnd,
+    label: selectedDate.toLocaleDateString("th-TH", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+    isFuture: selectedDate.getTime() > todayLocal.getTime(),
+  };
+}
+
+function parseRange(s: string | undefined): RangeKey {
+  if (s === "week" || s === "30d" || s === "day") return s;
+  return "today";
+}
+
 export default async function Home({
   searchParams,
 }: {
-  searchParams?: Promise<{ date?: string }>;
+  searchParams?: Promise<{ date?: string; range?: string }>;
 }) {
   const user = await getCurrentUser();
   if (user?.role === "dealer") redirect("/dealer-portal");
 
   const sp = await searchParams;
+  const range = parseRange(sp?.range);
   const selectedDate = parseDateParam(sp?.date);
-  const dayStart = new Date(selectedDate);
-  const dayEnd = new Date(selectedDate);
-  dayEnd.setDate(dayEnd.getDate() + 1);
-  const dayStartIso = dayStart.toISOString();
-  const dayEndIso = dayEnd.toISOString();
   const ymd = formatLocalYmd(selectedDate);
-  const today = new Date();
-  const todayLocal = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
+
+  const { start, end, label, isFuture } = computeRange(range, selectedDate);
+  const startIso = start.toISOString();
+  const endIso = end.toISOString();
+
+  // For UI: how many days are in the current range (used for label adjustments)
+  const dayMs = 24 * 60 * 60 * 1000;
+  const rangeDays = Math.max(
+    1,
+    Math.round((end.getTime() - start.getTime()) / dayMs)
   );
-  const todayYmd = formatLocalYmd(todayLocal);
-  const isToday = ymd === todayYmd;
-  const isFuture = selectedDate.getTime() > todayLocal.getTime();
+  const isMultiDay = rangeDays > 1;
 
   const [
-    ordersOfDay,
-    paymentsOfDay,
-    stagesDoneOfDay,
-    deliveredOfDay,
+    ordersOfRange,
+    paymentsOfRange,
+    stagesDoneOfRange,
+    deliveredOfRange,
     orderCreatedRows,
   ] = await Promise.all([
-    // Orders created on the day
     db
       .select({
         count: sql<number>`count(*)`.mapWith(Number),
@@ -117,11 +213,10 @@ export default async function Home({
       .from(schema.orders)
       .where(
         and(
-          gte(schema.orders.createdAt, dayStartIso),
-          lt(schema.orders.createdAt, dayEndIso)
+          gte(schema.orders.createdAt, startIso),
+          lt(schema.orders.createdAt, endIso)
         )
       ),
-    // Payments received on the day
     db
       .select({
         count: sql<number>`count(*)`.mapWith(Number),
@@ -132,11 +227,10 @@ export default async function Home({
       .from(schema.payments)
       .where(
         and(
-          gte(schema.payments.receivedAt, dayStartIso),
-          lt(schema.payments.receivedAt, dayEndIso)
+          gte(schema.payments.receivedAt, startIso),
+          lt(schema.payments.receivedAt, endIso)
         )
       ),
-    // Stages completed on the day, grouped by stage
     db
       .select({
         stage: schema.productionStages.stage,
@@ -146,12 +240,11 @@ export default async function Home({
       .where(
         and(
           eq(schema.productionStages.status, "done"),
-          gte(schema.productionStages.completedAt, dayStartIso),
-          lt(schema.productionStages.completedAt, dayEndIso)
+          gte(schema.productionStages.completedAt, startIso),
+          lt(schema.productionStages.completedAt, endIso)
         )
       )
       .groupBy(schema.productionStages.stage),
-    // Orders delivered on the day
     db
       .select({
         count: sql<number>`count(*)`.mapWith(Number),
@@ -160,11 +253,10 @@ export default async function Home({
       .where(
         and(
           eq(schema.orders.status, "delivered"),
-          gte(schema.orders.updatedAt, dayStartIso),
-          lt(schema.orders.updatedAt, dayEndIso)
+          gte(schema.orders.updatedAt, startIso),
+          lt(schema.orders.updatedAt, endIso)
         )
       ),
-    // Detailed list of orders created on the day
     db
       .select({
         id: schema.orders.id,
@@ -173,6 +265,7 @@ export default async function Home({
         deposit: schema.orders.deposit,
         customerName: schema.customers.name,
         createdByName: schema.users.name,
+        createdAt: schema.orders.createdAt,
       })
       .from(schema.orders)
       .leftJoin(
@@ -182,32 +275,24 @@ export default async function Home({
       .leftJoin(schema.users, eq(schema.orders.createdBy, schema.users.id))
       .where(
         and(
-          gte(schema.orders.createdAt, dayStartIso),
-          lt(schema.orders.createdAt, dayEndIso)
+          gte(schema.orders.createdAt, startIso),
+          lt(schema.orders.createdAt, endIso)
         )
       )
       .orderBy(desc(schema.orders.createdAt))
       .limit(20),
   ]);
 
-  const orderCount = ordersOfDay[0]?.count ?? 0;
-  const orderTotal = Number(ordersOfDay[0]?.totalSum ?? 0);
-  const paymentCount = paymentsOfDay[0]?.count ?? 0;
-  const paymentTotal = Number(paymentsOfDay[0]?.totalSum ?? 0);
-  const deliveredCount = deliveredOfDay[0]?.count ?? 0;
-  const totalStagesDone = stagesDoneOfDay.reduce((s, r) => s + r.count, 0);
+  const orderCount = ordersOfRange[0]?.count ?? 0;
+  const orderTotal = Number(ordersOfRange[0]?.totalSum ?? 0);
+  const paymentCount = paymentsOfRange[0]?.count ?? 0;
+  const paymentTotal = Number(paymentsOfRange[0]?.totalSum ?? 0);
+  const deliveredCount = deliveredOfRange[0]?.count ?? 0;
+  const totalStagesDone = stagesDoneOfRange.reduce((s, r) => s + r.count, 0);
 
-  // Map stage → count
   const stageDoneMap = new Map<string, number>(
-    stagesDoneOfDay.map((s) => [s.stage, s.count])
+    stagesDoneOfRange.map((s) => [s.stage, s.count])
   );
-
-  const dateLabelTH = selectedDate.toLocaleDateString("th-TH", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
 
   const STAGES: ProductionStage[] = [
     "graphic",
@@ -220,6 +305,19 @@ export default async function Home({
     "ship",
   ];
 
+  // Helper: build URL preserving range/date
+  function rangeHref(target: RangeKey): string {
+    if (target === "day") return `/?range=day&date=${ymd}`;
+    return `/?range=${target}`;
+  }
+
+  const rangeButtons: { key: RangeKey; label: string }[] = [
+    { key: "today", label: "วันนี้" },
+    { key: "week", label: "สัปดาห์นี้" },
+    { key: "30d", label: "30 วัน" },
+    { key: "day", label: "เลือกวัน" },
+  ];
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <header className="mb-6">
@@ -227,59 +325,88 @@ export default async function Home({
           แดชบอร์ด
         </h1>
         <p className="text-sm text-zinc-500 mt-1">
-          ภาพรวมงานประจำวัน — TG Sport · กาฬสินธุ์
+          ภาพรวมงาน — TG Sport · กาฬสินธุ์
         </p>
       </header>
 
-      {/* Date picker */}
-      <section className="card p-4 mb-6 flex items-center gap-2 flex-wrap">
-        <Calendar size={16} className="text-zinc-500 flex-shrink-0" />
-        <div className="flex items-center gap-1 flex-wrap flex-1">
-          <Link
-            href={`/?date=${shiftDateParam(selectedDate, -1)}`}
-            className="btn btn-ghost btn-xs"
-            aria-label="วันก่อนหน้า"
+      {/* Range selector */}
+      <section className="card p-4 mb-6">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Calendar size={16} className="text-zinc-500 flex-shrink-0" />
+          <div
+            role="tablist"
+            className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50/50 p-0.5"
           >
-            <ChevronLeft size={14} />
-          </Link>
-          <form
-            method="get"
-            action="/"
-            className="inline-flex items-center gap-1"
-          >
-            <input
-              type="date"
-              name="date"
-              defaultValue={ymd}
-              className="input text-sm"
-              style={{ width: 160 }}
-            />
-            <button type="submit" className="btn btn-outline btn-xs">
-              ดู
-            </button>
-          </form>
-          <Link
-            href={`/?date=${shiftDateParam(selectedDate, 1)}`}
-            className="btn btn-ghost btn-xs"
-            aria-label="วันถัดไป"
-          >
-            <ChevronRight size={14} />
-          </Link>
-          {!isToday && (
-            <Link href="/" className="btn btn-outline btn-xs ml-1">
-              วันนี้
-            </Link>
+            {rangeButtons.map((b) => {
+              const active = range === b.key;
+              return (
+                <Link
+                  key={b.key}
+                  href={rangeHref(b.key)}
+                  role="tab"
+                  aria-selected={active}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    active
+                      ? "bg-white text-ink-900 shadow-sm border border-zinc-200"
+                      : "text-zinc-600 hover:text-ink-900"
+                  }`}
+                >
+                  {b.label}
+                </Link>
+              );
+            })}
+          </div>
+
+          {range === "day" && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <Link
+                href={`/?range=day&date=${shiftDateParam(selectedDate, -1)}`}
+                className="btn btn-ghost btn-xs"
+                aria-label="วันก่อนหน้า"
+              >
+                <ChevronLeft size={14} />
+              </Link>
+              <form
+                method="get"
+                action="/"
+                className="inline-flex items-center gap-1"
+              >
+                <input type="hidden" name="range" value="day" />
+                <input
+                  type="date"
+                  name="date"
+                  defaultValue={ymd}
+                  className="input text-sm"
+                  style={{ width: 160 }}
+                />
+                <button type="submit" className="btn btn-outline btn-xs">
+                  ดู
+                </button>
+              </form>
+              <Link
+                href={`/?range=day&date=${shiftDateParam(selectedDate, 1)}`}
+                className="btn btn-ghost btn-xs"
+                aria-label="วันถัดไป"
+              >
+                <ChevronRight size={14} />
+              </Link>
+            </div>
           )}
+
+          <p className="text-sm font-medium text-ink-900 ml-auto">
+            {label}
+            {range === "day" && isFuture && (
+              <span className="text-xs text-zinc-400 ml-1.5">
+                (วันในอนาคต)
+              </span>
+            )}
+          </p>
         </div>
-        <p className="text-sm font-medium text-ink-900">
-          {dateLabelTH}
-          {isToday && (
-            <span className="text-xs text-brand-600 ml-1.5">(วันนี้)</span>
-          )}
-          {isFuture && (
-            <span className="text-xs text-zinc-400 ml-1.5">(วันในอนาคต)</span>
-          )}
-        </p>
+        {isMultiDay && (
+          <p className="text-[11px] text-zinc-500 mt-2 ml-6">
+            ครอบคลุม {rangeDays} วัน · ตัวเลขทุกอย่างสรุปทั้งช่วง
+          </p>
+        )}
       </section>
 
       {/* Stats */}
@@ -304,8 +431,8 @@ export default async function Home({
           label="งานเสร็จในแต่ละสเตจ"
           primary={`${totalStagesDone} ครั้ง`}
           secondary={
-            stagesDoneOfDay.length > 0
-              ? `${stagesDoneOfDay.length} แผนก`
+            stagesDoneOfRange.length > 0
+              ? `${stagesDoneOfRange.length} แผนก`
               : null
           }
         />
@@ -322,10 +449,10 @@ export default async function Home({
         <div className="px-5 py-4 border-b border-zinc-100">
           <h2 className="font-semibold text-ink-900 text-sm flex items-center gap-2">
             <TrendingUp size={15} className="text-zinc-500" />
-            งานเสร็จต่อแผนกในวันนี้
+            งานเสร็จต่อแผนก{isMultiDay ? "ในช่วงนี้" : "ในวันนี้"}
           </h2>
           <p className="text-xs text-zinc-500 mt-0.5">
-            แต่ละแผนกปิดงานไปกี่ครั้งในวัน {dateLabelTH}
+            แต่ละแผนกปิดงานไปกี่ครั้ง — {label}
           </p>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 divide-x divide-zinc-100 border-t border-zinc-100">
@@ -355,15 +482,18 @@ export default async function Home({
         </div>
       </section>
 
-      {/* Orders of the day */}
+      {/* Orders of the range */}
       <section className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-ink-900 text-sm">
-              ออเดอร์ที่รับเข้ามาในวัน
+              ออเดอร์ที่รับเข้ามา{isMultiDay ? "ในช่วงนี้" : "ในวันนี้"}
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
               {orderCount} ใบ · ยอดรวม {formatBaht(orderTotal)}
+              {orderCount > 20 && (
+                <span className="ml-1">(แสดง 20 ล่าสุด)</span>
+              )}
             </p>
           </div>
           <Link
@@ -379,7 +509,7 @@ export default async function Home({
         </div>
         {orderCreatedRows.length === 0 ? (
           <div className="p-12 text-center text-sm text-zinc-500">
-            ไม่มีออเดอร์ที่รับในวันนี้
+            ไม่มีออเดอร์ที่รับ{isMultiDay ? "ในช่วงนี้" : "ในวันนี้"}
           </div>
         ) : (
           <ul className="divide-y divide-zinc-100">
@@ -395,8 +525,13 @@ export default async function Home({
                   <span className="flex-1 truncate text-ink-900">
                     {o.customerName}
                   </span>
+                  {isMultiDay && (
+                    <span className="text-[11px] text-zinc-400 hidden md:inline whitespace-nowrap">
+                      {formatDateTH(o.createdAt)}
+                    </span>
+                  )}
                   {o.createdByName && (
-                    <span className="text-[11px] text-zinc-500 hidden sm:inline">
+                    <span className="text-[11px] text-zinc-500 hidden lg:inline">
                       โดย {o.createdByName}
                     </span>
                   )}
@@ -416,15 +551,15 @@ export default async function Home({
       </section>
 
       {/* Stage completions detail */}
-      {stagesDoneOfDay.length > 0 && (
+      {stagesDoneOfRange.length > 0 && (
         <section className="card overflow-hidden mt-6">
           <div className="px-5 py-4 border-b border-zinc-100">
             <h2 className="font-semibold text-ink-900 text-sm">
-              รายละเอียดงานที่ปิดในวัน
+              รายละเอียดงานที่ปิด — {RANGE_LABELS[range]}
             </h2>
           </div>
           <ul className="divide-y divide-zinc-100">
-            {stagesDoneOfDay.map((s) => {
+            {stagesDoneOfRange.map((s) => {
               const Icon = stageIcon[s.stage];
               return (
                 <li
@@ -490,5 +625,4 @@ function StatCard({
 }
 
 // Avoid unused import errors
-void formatDateTH;
 void lte;
