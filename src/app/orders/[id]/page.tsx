@@ -128,14 +128,6 @@ export default async function OrderDetailPage({
               {statusLabels[order.status as keyof typeof statusLabels]}
             </span>
             <a
-              href={`/api/orders/${id}/work-order`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-outline btn-sm"
-            >
-              🛠️ ใบงาน
-            </a>
-            <a
               href={`/api/orders/${id}/quotation`}
               target="_blank"
               rel="noreferrer"
