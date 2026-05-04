@@ -67,7 +67,7 @@ export default async function ReportsPage() {
       .limit(5),
     db
       .select({
-        ym: sql<string>`substr(${schema.orders.updatedAt}, 1, 7)`.mapWith(
+        ym: sql<string>`to_char(${schema.orders.updatedAt}::timestamptz, 'YYYY-MM')`.mapWith(
           String
         ),
         total:
@@ -75,20 +75,38 @@ export default async function ReportsPage() {
       })
       .from(schema.orders)
       .where(inArray(schema.orders.status, ["delivered", "paid"]))
-      .groupBy(sql`substr(${schema.orders.updatedAt}, 1, 7)`)
-      .orderBy(desc(sql`substr(${schema.orders.updatedAt}, 1, 7)`))
+      .groupBy(
+        sql`to_char(${schema.orders.updatedAt}::timestamptz, 'YYYY-MM')`
+      )
+      .orderBy(
+        desc(
+          sql`to_char(${schema.orders.updatedAt}::timestamptz, 'YYYY-MM')`
+        )
+      )
       .limit(6),
     db
       .select({
         stage: schema.productionStages.stage,
-        avgHours:
-          sql<number>`avg((julianday(${schema.productionStages.completedAt}) - julianday(${schema.productionStages.startedAt})) * 24)`.mapWith(
-            Number
-          ),
+        // Postgres replacement for the old SQLite julianday() math:
+        // EXTRACT(EPOCH FROM interval) returns seconds — divide by 3600
+        // to get hours. completedAt and startedAt are stored as strings
+        // (text columns) so we cast both to timestamptz before subtract.
+        avgHours: sql<number>`avg(
+          extract(epoch from (
+            ${schema.productionStages.completedAt}::timestamptz
+            - ${schema.productionStages.startedAt}::timestamptz
+          )) / 3600.0
+        )`.mapWith(Number),
         completed: sql<number>`count(*)`.mapWith(Number),
       })
       .from(schema.productionStages)
-      .where(eq(schema.productionStages.status, "done"))
+      .where(
+        and(
+          eq(schema.productionStages.status, "done"),
+          sql`${schema.productionStages.startedAt} is not null`,
+          sql`${schema.productionStages.completedAt} is not null`
+        )
+      )
       .groupBy(schema.productionStages.stage),
     db
       .select({
