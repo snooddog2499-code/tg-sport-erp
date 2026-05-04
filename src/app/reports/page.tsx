@@ -62,7 +62,10 @@ export default async function ReportsPage() {
         schema.customers,
         eq(schema.orders.customerId, schema.customers.id)
       )
-      .groupBy(schema.orders.customerId)
+      // Postgres requires every non-aggregated SELECT column to appear
+      // in GROUP BY. SQLite was lenient about customers.name from the
+      // joined table — Postgres is not, so add it explicitly.
+      .groupBy(schema.orders.customerId, schema.customers.name)
       .orderBy(desc(sql`sum(${schema.orders.total})`))
       .limit(5),
     db
