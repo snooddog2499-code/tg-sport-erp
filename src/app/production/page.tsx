@@ -1,5 +1,5 @@
 import { db, schema } from "@/db";
-import { eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import Link from "next/link";
 import { productionStageEnum } from "@/db/schema";
 import { stageLabels, formatDateTH } from "@/lib/format";
@@ -130,7 +130,7 @@ function timeInStage(startedAt: string | null): string | null {
 }
 
 export default async function ProductionPage() {
-  const [stages, users] = await Promise.all([
+  const [stages, users, orderFileRows, designRows] = await Promise.all([
     db
       .select({
         id: schema.productionStages.id,
@@ -159,7 +159,57 @@ export default async function ProductionPage() {
         eq(schema.productionStages.assignedTo, schema.users.id)
       ),
     db.select().from(schema.users),
+    // Image attachments per order (rough — we'll filter to active orders below)
+    db
+      .select({
+        orderId: schema.orderFiles.orderId,
+        fileUrl: schema.orderFiles.fileUrl,
+        fileName: schema.orderFiles.fileName,
+        mimeType: schema.orderFiles.mimeType,
+        createdAt: schema.orderFiles.createdAt,
+      })
+      .from(schema.orderFiles)
+      .where(sql`${schema.orderFiles.mimeType} like 'image/%'`)
+      .orderBy(desc(schema.orderFiles.createdAt)),
+    // Designs with a file URL — newest version first per order
+    db
+      .select({
+        orderId: schema.designs.orderId,
+        fileUrl: schema.designs.fileUrl,
+        version: schema.designs.version,
+        status: schema.designs.status,
+      })
+      .from(schema.designs)
+      .where(sql`${schema.designs.fileUrl} is not null`)
+      .orderBy(desc(schema.designs.version)),
   ]);
+
+  // Build a per-order image list. Approved/pending designs come first
+  // (cleanest reference for floor staff), then customer-supplied
+  // attachments, deduped by URL. Cap at 6 per order to keep cards tidy.
+  const imagesByOrder = new Map<number, { url: string; label: string }[]>();
+  function addImage(
+    orderId: number,
+    url: string | null,
+    label: string
+  ) {
+    if (!url) return;
+    const arr = imagesByOrder.get(orderId) ?? [];
+    if (arr.some((x) => x.url === url)) return;
+    if (arr.length >= 6) return;
+    arr.push({ url, label });
+    imagesByOrder.set(orderId, arr);
+  }
+  for (const d of designRows) {
+    addImage(
+      d.orderId,
+      d.fileUrl,
+      `ดีไซน์ v${d.version}${d.status === "approved" ? " (อนุมัติ)" : ""}`
+    );
+  }
+  for (const f of orderFileRows) {
+    addImage(f.orderId, f.fileUrl, f.fileName ?? "รูปแนบ");
+  }
 
   const byStage = Object.fromEntries(
     productionStageEnum.map((s) => [s, [] as typeof stages])
@@ -250,6 +300,7 @@ export default async function ProductionPage() {
                 {items.map((s) => {
                   const dl = deadlineStatus(s.deadline);
                   const elapsed = timeInStage(s.startedAt);
+                  const images = imagesByOrder.get(s.orderId) ?? [];
                   return (
                     <div
                       key={s.id}
@@ -288,6 +339,37 @@ export default async function ProductionPage() {
                           <p className="text-[10px] text-zinc-400 mt-0.5">
                             {elapsed}
                           </p>
+                        )}
+                        {images.length > 0 && (
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {images.slice(0, 4).map((img, i) => (
+                              <a
+                                key={`${img.url}-${i}`}
+                                href={img.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={img.label}
+                                className="block w-10 h-10 rounded overflow-hidden border border-zinc-200 hover:border-brand-400 hover:ring-1 hover:ring-brand-200 transition-all flex-shrink-0 bg-zinc-100"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={img.url}
+                                  alt={img.label}
+                                  loading="lazy"
+                                  className="w-full h-full object-cover"
+                                />
+                              </a>
+                            ))}
+                            {images.length > 4 && (
+                              <Link
+                                href={`/orders/${s.orderId}`}
+                                title="ดูรูปทั้งหมดในหน้าออเดอร์"
+                                className="w-10 h-10 rounded bg-zinc-100 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-600 flex items-center justify-center flex-shrink-0 transition-colors"
+                              >
+                                +{images.length - 4}
+                              </Link>
+                            )}
+                          </div>
                         )}
                       </div>
 
