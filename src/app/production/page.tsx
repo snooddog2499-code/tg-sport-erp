@@ -19,6 +19,8 @@ import {
   AlertTriangle,
   Clock,
   UserCircle2,
+  Paperclip,
+  ImageIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -186,7 +188,7 @@ export default async function ProductionPage() {
 
   // Build a per-order image list. Approved/pending designs come first
   // (cleanest reference for floor staff), then customer-supplied
-  // attachments, deduped by URL. Cap at 6 per order to keep cards tidy.
+  // attachments, deduped by URL.
   const imagesByOrder = new Map<number, { url: string; label: string }[]>();
   function addImage(
     orderId: number,
@@ -196,7 +198,6 @@ export default async function ProductionPage() {
     if (!url) return;
     const arr = imagesByOrder.get(orderId) ?? [];
     if (arr.some((x) => x.url === url)) return;
-    if (arr.length >= 6) return;
     arr.push({ url, label });
     imagesByOrder.set(orderId, arr);
   }
@@ -247,7 +248,10 @@ export default async function ProductionPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-8 gap-4">
+      {/* Trello-style horizontal kanban: scroll right to see more stages.
+          Each column has a fixed width so cards inside can show large
+          cover images without cramming. */}
+      <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 md:-mx-8 md:px-8">
         {productionStageEnum.map((stageKey) => {
           const Icon = stageIcon[stageKey];
           const tone = stageTone[stageKey];
@@ -259,7 +263,7 @@ export default async function ProductionPage() {
           return (
             <div
               key={stageKey}
-              className="card overflow-hidden flex flex-col min-h-[28rem]"
+              className="card overflow-hidden flex flex-col min-h-[28rem] flex-shrink-0 w-72"
             >
               <div
                 className={`h-1 bg-gradient-to-r ${tone.bar}`}
@@ -301,13 +305,43 @@ export default async function ProductionPage() {
                   const dl = deadlineStatus(s.deadline);
                   const elapsed = timeInStage(s.startedAt);
                   const images = imagesByOrder.get(s.orderId) ?? [];
+                  const cover = images[0];
+                  const attachCount = images.length;
                   return (
                     <div
                       key={s.id}
                       className="bg-white rounded-lg border border-zinc-200 hover:border-zinc-300 hover:shadow-sm transition-all overflow-hidden"
                     >
-                      <div className="px-3 pt-3 pb-2">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                      {/* Cover image — Trello style. Full width of the
+                          card, large square aspect for clear references. */}
+                      {cover ? (
+                        <a
+                          href={cover.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={cover.label}
+                          className="block bg-zinc-100 aspect-square overflow-hidden"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={cover.url}
+                            alt={cover.label}
+                            loading="lazy"
+                            className="w-full h-full object-cover hover:scale-[1.02] transition-transform"
+                          />
+                        </a>
+                      ) : (
+                        <Link
+                          href={`/orders/${s.orderId}`}
+                          className="block bg-zinc-50 aspect-square flex items-center justify-center text-zinc-300 border-b border-zinc-100 hover:bg-zinc-100 transition-colors"
+                          title="ยังไม่มีรูป — กดเพื่อเปิดออเดอร์"
+                        >
+                          <ImageIcon size={32} strokeWidth={1.5} />
+                        </Link>
+                      )}
+
+                      <div className="px-3 pt-2.5 pb-2">
+                        <div className="flex items-center justify-between gap-2 mb-1">
                           <Link
                             href={`/orders/${s.orderId}`}
                             className="font-mono text-[11px] font-semibold text-brand-600 hover:text-brand-700"
@@ -332,45 +366,26 @@ export default async function ProductionPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm font-medium text-ink-900 truncate">
+                        <p className="text-sm font-semibold text-ink-900 leading-snug">
                           {s.customerName ?? "-"}
                         </p>
-                        {elapsed && (
-                          <p className="text-[10px] text-zinc-400 mt-0.5">
-                            {elapsed}
-                          </p>
-                        )}
-                        {images.length > 0 && (
-                          <div className="flex gap-1 mt-2 flex-wrap">
-                            {images.slice(0, 4).map((img, i) => (
-                              <a
-                                key={`${img.url}-${i}`}
-                                href={img.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={img.label}
-                                className="block w-10 h-10 rounded overflow-hidden border border-zinc-200 hover:border-brand-400 hover:ring-1 hover:ring-brand-200 transition-all flex-shrink-0 bg-zinc-100"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={img.url}
-                                  alt={img.label}
-                                  loading="lazy"
-                                  className="w-full h-full object-cover"
-                                />
-                              </a>
-                            ))}
-                            {images.length > 4 && (
-                              <Link
-                                href={`/orders/${s.orderId}`}
-                                title="ดูรูปทั้งหมดในหน้าออเดอร์"
-                                className="w-10 h-10 rounded bg-zinc-100 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-600 flex items-center justify-center flex-shrink-0 transition-colors"
-                              >
-                                +{images.length - 4}
-                              </Link>
-                            )}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-3 mt-1">
+                          {elapsed && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
+                              <Clock size={10} strokeWidth={2} />
+                              {elapsed}
+                            </span>
+                          )}
+                          {attachCount > 0 && (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] text-zinc-500"
+                              title={`รูป/ไฟล์แนบทั้งหมด ${attachCount}`}
+                            >
+                              <Paperclip size={10} strokeWidth={2} />
+                              {attachCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="px-3 pb-3 space-y-1.5">
