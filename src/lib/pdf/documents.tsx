@@ -774,12 +774,14 @@ export function WorkOrderPDF({
   customer,
   items,
   designs,
+  attachments = [],
   stages,
 }: {
   order: OrderInfo;
   customer: CustomerInfo;
   items: OrderItem[];
   designs: DesignMock[];
+  attachments?: Array<{ fileName: string; imageData: string }>;
   stages: Array<{
     stage: (typeof stageOrder)[number];
     status: "pending" | "active" | "done";
@@ -906,6 +908,27 @@ export function WorkOrderPDF({
             )
           )}
         </View>
+
+        {attachments.length > 0 && (
+          <>
+            <Text style={workStyles.sectionHead}>รูปแนบจากลูกค้า</Text>
+            <View style={workStyles.mockupRow}>
+              {attachments.map((a, i) => (
+                <View key={i}>
+                  <Image style={workStyles.mockup} src={a.imageData} />
+                  <Text
+                    style={workStyles.mockupCaption}
+                    wrap={false}
+                  >
+                    {a.fileName.length > 22
+                      ? a.fileName.slice(0, 20) + "…"
+                      : a.fileName}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
 
         <Text style={workStyles.sectionHead}>สเตจการผลิต</Text>
         <View style={workStyles.stagesRow}>

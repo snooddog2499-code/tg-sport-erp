@@ -196,6 +196,27 @@ export async function renderWorkOrderPDF(orderId: number): Promise<Buffer> {
     }))
   );
 
+  // Reference photos uploaded with the order (customer-supplied
+  // shirt photos, logos, etc.) — show on the work order so floor
+  // staff have the same visual the office team got.
+  const orderFileRows = await db
+    .select()
+    .from(schema.orderFiles)
+    .where(eq(schema.orderFiles.orderId, orderId));
+
+  const attachmentImages = await Promise.all(
+    orderFileRows
+      .filter((f) => isImageMime(f.mimeType))
+      .slice(0, 6) // cap so PDF stays small
+      .map(async (f) => ({
+        fileName: f.fileName,
+        imageData: f.fileUrl ? await loadImageAsDataUri(f.fileUrl) : null,
+      }))
+  );
+  const attachments = attachmentImages.filter(
+    (a): a is { fileName: string; imageData: string } => !!a.imageData
+  );
+
   const stageRows = await db
     .select({
       stage: schema.productionStages.stage,
@@ -242,6 +263,7 @@ export async function renderWorkOrderPDF(orderId: number): Promise<Buffer> {
         note: it.note,
       })),
       designs,
+      attachments,
       stages: stageRows as Array<{
         stage: ProductionStage;
         status: "pending" | "active" | "done";
