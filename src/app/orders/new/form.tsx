@@ -213,10 +213,51 @@ export default function NewOrderForm({
         {customerStatus === "new" && (
           <p className="text-[11px] text-brand-600 mt-1">
             + ลูกค้าใหม่ &mdash; ระบบจะเพิ่ม &quot;{customerName.trim()}&quot;
-            ให้อัตโนมัติเมื่อบันทึกออเดอร์
+            ให้อัตโนมัติเมื่อบันทึกออเดอร์ (กรอกข้อมูลติดต่อด้านล่างเพื่อใช้กับใบเสนอราคา/ใบส่งของ)
           </p>
         )}
       </Field>
+
+      {customerStatus === "new" && (
+        <div className="bg-brand-50 border border-brand-200 rounded-md p-4 space-y-4">
+          <p className="text-xs font-medium text-brand-700">
+            ข้อมูลติดต่อลูกค้าใหม่ (ไม่บังคับ — เพิ่มเติมภายหลังได้ที่ /customers)
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field
+              label="เบอร์โทร"
+              error={state.errors?.customerPhone}
+            >
+              <input
+                name="customerPhone"
+                type="tel"
+                inputMode="tel"
+                className="input"
+                placeholder="08x-xxx-xxxx"
+              />
+            </Field>
+            <Field label="อีเมล" error={state.errors?.customerEmail}>
+              <input
+                name="customerEmail"
+                type="email"
+                className="input"
+                placeholder="customer@example.com"
+              />
+            </Field>
+          </div>
+          <Field
+            label="ที่อยู่ (สำหรับจัดส่ง / ใบเสนอราคา)"
+            error={state.errors?.customerAddress}
+          >
+            <textarea
+              name="customerAddress"
+              rows={2}
+              className="input"
+              placeholder="บ้านเลขที่, หมู่, ตำบล, อำเภอ, จังหวัด, รหัสไปรษณีย์"
+            />
+          </Field>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Field label="ประเภทเสื้อ" required error={state.errors?.garmentType}>
@@ -550,10 +591,33 @@ export default function NewOrderForm({
           type="file"
           multiple
           accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            const tooBig = files.filter((f) => f.size > 20 * 1024 * 1024);
+            const totalMb =
+              files.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
+            if (tooBig.length > 0) {
+              alert(
+                `ไฟล์ใหญ่เกิน 20 MB:\n${tooBig
+                  .map(
+                    (f) => `• ${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`
+                  )
+                  .join("\n")}\n\nกรุณาย่อรูปก่อนอัปโหลด`
+              );
+              e.target.value = "";
+              return;
+            }
+            if (totalMb > 24) {
+              alert(
+                `รวมไฟล์ทั้งหมด ${totalMb.toFixed(1)} MB เกิน 24 MB — กรุณาแบ่งอัปโหลดทีละน้อยลง หรือย่อรูป`
+              );
+              e.target.value = "";
+            }
+          }}
           className="block w-full text-sm text-zinc-700 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-zinc-900 file:text-white hover:file:bg-zinc-800 file:cursor-pointer"
         />
         <p className="text-[11px] text-zinc-500 mt-1">
-          เลือกได้หลายไฟล์ · สูงสุด 20 MB/ไฟล์ · รองรับรูปภาพ, PDF, Word, Excel
+          เลือกได้หลายไฟล์ · สูงสุด 20 MB/ไฟล์ · รวมทั้งหมดไม่เกิน 24 MB · รองรับรูปภาพ, PDF, Word, Excel
         </p>
       </Field>
 
