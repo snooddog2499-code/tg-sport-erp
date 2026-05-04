@@ -8,6 +8,11 @@ import Link from "next/link";
 
 export const metadata = { title: "รายงาน — TG Sport ERP" };
 
+// Reports aggregate hundreds of rows — cache the page for 5 minutes
+// so repeat visits hit Vercel's edge cache instead of running 7 DB
+// round-trips to Mumbai every time.
+export const revalidate = 300;
+
 export default async function ReportsPage() {
   await requirePerm("reports:view");
 
