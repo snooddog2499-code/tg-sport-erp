@@ -14,6 +14,8 @@ export type AuditAction =
   | "restock"
   | "stock_adjust"
   | "material_used"
+  | "material_withdraw"
+  | "withdrawal_delete"
   | "attendance_recorded"
   | "payroll_finalized";
 

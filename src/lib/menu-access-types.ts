@@ -24,6 +24,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { key: "orders", label: "ออเดอร์", href: "/orders", defaultLevel: "staff" },
   { key: "production", label: "การผลิต", href: "/production", defaultLevel: "staff" },
   { key: "materials", label: "วัตถุดิบ", href: "/materials", defaultLevel: "admin" },
+  { key: "withdrawals", label: "เบิกวัตถุดิบ", href: "/withdrawals", defaultLevel: "staff" },
   { key: "dealers", label: "ตัวแทนจำหน่าย", href: "/dealers", defaultLevel: "admin" },
   { key: "attendance", label: "ลงเวลาเข้างาน", href: "/attendance", defaultLevel: "staff" },
   { key: "employees", label: "พนักงาน", href: "/employees", defaultLevel: "admin" },

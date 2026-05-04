@@ -228,6 +228,25 @@ export const materialUsage = pgTable("material_usage", {
     .defaultNow(),
 });
 
+export const materialWithdrawals = pgTable("material_withdrawals", {
+  id: serial("id").primaryKey(),
+  materialId: integer("material_id")
+    .notNull()
+    .references(() => materials.id),
+  qty: real("qty").notNull(),
+  dept: text("dept").notNull(),
+  withdrawnBy: integer("withdrawn_by")
+    .notNull()
+    .references(() => users.id),
+  orderId: integer("order_id").references(() => orders.id, {
+    onDelete: "set null",
+  }),
+  note: text("note"),
+  withdrawnAt: timestamp("withdrawn_at", { mode: "string", withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const quotations = pgTable("quotations", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id")
