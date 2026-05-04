@@ -53,7 +53,7 @@ const RANGE_LABELS: Record<RangeKey, string> = {
   today: "วันนี้",
   week: "สัปดาห์นี้",
   "30d": "30 วันที่ผ่านมา",
-  day: "เลือกวัน",
+  day: "เลือกช่วง",
 };
 
 function parseDateParam(s: string | undefined): Date {
@@ -85,7 +85,8 @@ function shiftDateParam(date: Date, days: number): string {
 // Compute [start, end) range. End is exclusive.
 function computeRange(
   range: RangeKey,
-  selectedDate: Date
+  fromDate: Date,
+  toDate: Date
 ): { start: Date; end: Date; label: string; isFuture: boolean } {
   const now = new Date();
   const todayLocal = new Date(
@@ -149,20 +150,37 @@ function computeRange(
     };
   }
 
-  // range === "day" — single chosen date
-  const dayStart = new Date(selectedDate);
-  const dayEnd = new Date(selectedDate);
-  dayEnd.setDate(dayEnd.getDate() + 1);
+  // range === "day" — custom from–to range (inclusive on both ends)
+  // Normalize: ensure from <= to
+  const fromMs = fromDate.getTime();
+  const toMs = toDate.getTime();
+  const start = new Date(Math.min(fromMs, toMs));
+  const endInclusive = new Date(Math.max(fromMs, toMs));
+  const end = new Date(endInclusive);
+  end.setDate(end.getDate() + 1); // exclusive
+
+  const sameDay = start.getTime() === endInclusive.getTime();
+  const label = sameDay
+    ? start.toLocaleDateString("th-TH", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : `${start.toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+      })} – ${endInclusive.toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })}`;
+
   return {
-    start: dayStart,
-    end: dayEnd,
-    label: selectedDate.toLocaleDateString("th-TH", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }),
-    isFuture: selectedDate.getTime() > todayLocal.getTime(),
+    start,
+    end,
+    label,
+    isFuture: start.getTime() > todayLocal.getTime(),
   };
 }
 
@@ -174,17 +192,29 @@ function parseRange(s: string | undefined): RangeKey {
 export default async function Home({
   searchParams,
 }: {
-  searchParams?: Promise<{ date?: string; range?: string }>;
+  searchParams?: Promise<{
+    date?: string;
+    from?: string;
+    to?: string;
+    range?: string;
+  }>;
 }) {
   const user = await getCurrentUser();
   if (user?.role === "dealer") redirect("/dealer-portal");
 
   const sp = await searchParams;
   const range = parseRange(sp?.range);
-  const selectedDate = parseDateParam(sp?.date);
-  const ymd = formatLocalYmd(selectedDate);
+  // Custom range supports either ?from=&to= (preferred) or legacy ?date=
+  const fromDate = parseDateParam(sp?.from ?? sp?.date);
+  const toDate = parseDateParam(sp?.to ?? sp?.date);
+  const fromYmd = formatLocalYmd(fromDate);
+  const toYmd = formatLocalYmd(toDate);
 
-  const { start, end, label, isFuture } = computeRange(range, selectedDate);
+  const { start, end, label, isFuture } = computeRange(
+    range,
+    fromDate,
+    toDate
+  );
   const startIso = start.toISOString();
   const endIso = end.toISOString();
 
@@ -307,7 +337,7 @@ export default async function Home({
 
   // Helper: build URL preserving range/date
   function rangeHref(target: RangeKey): string {
-    if (target === "day") return `/?range=day&date=${ymd}`;
+    if (target === "day") return `/?range=day&from=${fromYmd}&to=${toYmd}`;
     return `/?range=${target}`;
   }
 
@@ -315,7 +345,7 @@ export default async function Home({
     { key: "today", label: "วันนี้" },
     { key: "week", label: "สัปดาห์นี้" },
     { key: "30d", label: "30 วัน" },
-    { key: "day", label: "เลือกวัน" },
+    { key: "day", label: "เลือกช่วง" },
   ];
 
   return (
@@ -358,39 +388,50 @@ export default async function Home({
           </div>
 
           {range === "day" && (
-            <div className="flex items-center gap-1 flex-wrap">
+            <form
+              method="get"
+              action="/"
+              className="inline-flex items-center gap-1.5 flex-wrap"
+            >
+              <input type="hidden" name="range" value="day" />
+              <span className="text-xs text-zinc-500">จาก</span>
+              <input
+                type="date"
+                name="from"
+                defaultValue={fromYmd}
+                className="input text-sm"
+                style={{ width: 150 }}
+                required
+              />
+              <span className="text-xs text-zinc-500">ถึง</span>
+              <input
+                type="date"
+                name="to"
+                defaultValue={toYmd}
+                className="input text-sm"
+                style={{ width: 150 }}
+                required
+              />
+              <button type="submit" className="btn btn-outline btn-xs">
+                ดู
+              </button>
               <Link
-                href={`/?range=day&date=${shiftDateParam(selectedDate, -1)}`}
+                href={`/?range=day&from=${shiftDateParam(fromDate, -1)}&to=${shiftDateParam(toDate, -1)}`}
                 className="btn btn-ghost btn-xs"
-                aria-label="วันก่อนหน้า"
+                aria-label="เลื่อนช่วงไปก่อนหน้า 1 วัน"
+                title="เลื่อนช่วงทั้งหมดถอยหลัง 1 วัน"
               >
                 <ChevronLeft size={14} />
               </Link>
-              <form
-                method="get"
-                action="/"
-                className="inline-flex items-center gap-1"
-              >
-                <input type="hidden" name="range" value="day" />
-                <input
-                  type="date"
-                  name="date"
-                  defaultValue={ymd}
-                  className="input text-sm"
-                  style={{ width: 160 }}
-                />
-                <button type="submit" className="btn btn-outline btn-xs">
-                  ดู
-                </button>
-              </form>
               <Link
-                href={`/?range=day&date=${shiftDateParam(selectedDate, 1)}`}
+                href={`/?range=day&from=${shiftDateParam(fromDate, 1)}&to=${shiftDateParam(toDate, 1)}`}
                 className="btn btn-ghost btn-xs"
-                aria-label="วันถัดไป"
+                aria-label="เลื่อนช่วงไปถัดไป 1 วัน"
+                title="เลื่อนช่วงทั้งหมดไปข้างหน้า 1 วัน"
               >
                 <ChevronRight size={14} />
               </Link>
-            </div>
+            </form>
           )}
 
           <p className="text-sm font-medium text-ink-900 ml-auto">
