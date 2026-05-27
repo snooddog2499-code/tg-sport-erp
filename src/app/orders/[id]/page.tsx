@@ -1,5 +1,6 @@
 import { db, schema } from "@/db";
 import { eq, desc } from "drizzle-orm";
+import { productionStageEnum } from "@/db/schema";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
@@ -66,10 +67,22 @@ export default async function OrderDetailPage({
     .from(schema.orderItems)
     .where(eq(schema.orderItems.orderId, id));
 
-  const stages = await db
+  const stagesRaw = await db
     .select()
     .from(schema.productionStages)
     .where(eq(schema.productionStages.orderId, id));
+
+  // Postgres returns unordered without ORDER BY — sort by the canonical
+  // production flow (graphic → print → roll → laser → sew → qc → pack →
+  // ship) so the strip on the order detail page always reads left to
+  // right in the correct sequence.
+  const stageOrder = new Map(
+    productionStageEnum.map((s, i) => [s, i] as const)
+  );
+  const stages = [...stagesRaw].sort(
+    (a, b) =>
+      (stageOrder.get(a.stage) ?? 99) - (stageOrder.get(b.stage) ?? 99)
+  );
 
   const invoiceRows = await db
     .select()
