@@ -37,14 +37,22 @@ const stageIcon: Record<ProductionStage, LucideIcon> = {
 };
 
 const stageTone: Record<ProductionStage, string> = {
-  graphic: "bg-pink-50 text-pink-700",
-  print: "bg-sky-50 text-sky-700",
-  roll: "bg-orange-50 text-orange-700",
-  laser: "bg-indigo-50 text-indigo-700",
-  sew: "bg-teal-50 text-teal-700",
-  qc: "bg-emerald-50 text-emerald-700",
-  pack: "bg-amber-50 text-amber-700",
-  ship: "bg-zinc-100 text-zinc-700",
+  graphic:
+    "bg-gradient-to-br from-pink-50 to-pink-100 text-pink-700 ring-1 ring-pink-200/60",
+  print:
+    "bg-gradient-to-br from-sky-50 to-sky-100 text-sky-700 ring-1 ring-sky-200/60",
+  roll:
+    "bg-gradient-to-br from-orange-50 to-orange-100 text-orange-700 ring-1 ring-orange-200/60",
+  laser:
+    "bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-700 ring-1 ring-indigo-200/60",
+  sew:
+    "bg-gradient-to-br from-teal-50 to-teal-100 text-teal-700 ring-1 ring-teal-200/60",
+  qc:
+    "bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-700 ring-1 ring-emerald-200/60",
+  pack:
+    "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-700 ring-1 ring-amber-200/60",
+  ship:
+    "bg-gradient-to-br from-zinc-100 to-zinc-200 text-zinc-700 ring-1 ring-zinc-300/60",
 };
 
 type RangeKey = "today" | "week" | "30d" | "day";
@@ -361,8 +369,10 @@ export default async function Home({
 
       {/* Range selector */}
       <section className="card p-4 mb-6">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Calendar size={16} className="text-zinc-500 flex-shrink-0" />
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-zinc-50 to-zinc-100 text-zinc-600 ring-1 ring-zinc-200/60 shadow-sm flex-shrink-0">
+            <Calendar size={15} strokeWidth={2} />
+          </span>
           <div
             role="tablist"
             className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50/50 p-0.5"
@@ -444,7 +454,7 @@ export default async function Home({
           </p>
         </div>
         {isMultiDay && (
-          <p className="text-[11px] text-zinc-500 mt-2 ml-6">
+          <p className="text-[11px] text-zinc-500 mt-2 ml-10">
             ครอบคลุม {rangeDays} วัน · ตัวเลขทุกอย่างสรุปทั้งช่วง
           </p>
         )}
@@ -488,8 +498,10 @@ export default async function Home({
       {/* Stage activity */}
       <section className="card overflow-hidden mb-6">
         <div className="px-5 py-4 border-b border-zinc-100">
-          <h2 className="font-semibold text-ink-900 text-sm flex items-center gap-2">
-            <TrendingUp size={15} className="text-zinc-500" />
+          <h2 className="font-semibold text-ink-900 text-sm flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-violet-50 to-violet-100 text-violet-600 ring-1 ring-violet-200/60 shadow-sm">
+              <TrendingUp size={14} strokeWidth={2} />
+            </span>
             งานเสร็จต่อแผนก{isMultiDay ? "ในช่วงนี้" : "ในวันนี้"}
           </h2>
           <p className="text-xs text-zinc-500 mt-0.5">
@@ -500,19 +512,25 @@ export default async function Home({
           {STAGES.map((stage) => {
             const count = stageDoneMap.get(stage) ?? 0;
             const Icon = stageIcon[stage];
+            const empty = count === 0;
             return (
-              <div key={stage} className="px-3 py-3">
+              <div
+                key={stage}
+                className="px-3 py-4 hover:bg-zinc-50/60 transition-colors"
+              >
                 <div
-                  className={`inline-flex items-center justify-center w-7 h-7 rounded-md mb-1.5 ${stageTone[stage]}`}
+                  className={`inline-flex items-center justify-center w-10 h-10 rounded-xl mb-2 shadow-sm ${stageTone[stage]} ${
+                    empty ? "opacity-70" : ""
+                  }`}
                 >
-                  <Icon size={13} strokeWidth={2.25} />
+                  <Icon size={18} strokeWidth={2} />
                 </div>
-                <p className="text-[11px] text-zinc-500">
+                <p className="text-[11px] text-zinc-500 font-medium">
                   {stageLabels[stage]}
                 </p>
                 <p
-                  className={`text-xl font-bold tabular-nums ${
-                    count === 0 ? "text-zinc-300" : "text-ink-900"
+                  className={`text-2xl font-bold tabular-nums tracking-tight ${
+                    empty ? "text-zinc-300" : "text-ink-900"
                   }`}
                 >
                   {count}
@@ -641,21 +659,30 @@ function StatCard({
   primary: string;
   secondary?: string | null;
 }) {
+  // Soft gradient + matching ring gives icons real depth instead of the
+  // flat single-tone chip. Icon itself stays thin-stroked (2.0) so the
+  // bold number stays the dominant element on the card.
   const toneStyles: Record<string, string> = {
-    brand: "bg-brand-50 text-brand-600",
-    amber: "bg-amber-50 text-amber-700",
-    purple: "bg-purple-50 text-purple-700",
-    emerald: "bg-emerald-50 text-emerald-700",
+    brand:
+      "bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 ring-1 ring-brand-200/60",
+    amber:
+      "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-700 ring-1 ring-amber-200/60",
+    purple:
+      "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-700 ring-1 ring-purple-200/60",
+    emerald:
+      "bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-700 ring-1 ring-emerald-200/60",
   };
   return (
-    <div className="card p-4 md:p-5">
+    <div className="card p-4 md:p-5 hover:shadow-md transition-shadow">
       <div
-        className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 ${toneStyles[tone]}`}
+        className={`w-11 h-11 md:w-12 md:h-12 rounded-xl flex items-center justify-center mb-3 shadow-sm ${toneStyles[tone]}`}
       >
-        <Icon size={18} strokeWidth={2.25} />
+        <Icon size={22} strokeWidth={2} />
       </div>
-      <p className="text-xs text-zinc-500 font-medium">{label}</p>
-      <p className="text-xl md:text-2xl font-bold text-ink-900 mt-1 tabular-nums">
+      <p className="text-xs text-zinc-500 font-medium uppercase tracking-wide">
+        {label}
+      </p>
+      <p className="text-xl md:text-2xl font-bold text-ink-900 mt-1 tabular-nums tracking-tight">
         {primary}
       </p>
       {secondary && (
