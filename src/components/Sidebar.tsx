@@ -13,6 +13,7 @@ import {
   ScrollText,
   Package,
   PackageMinus,
+  Wallet,
   BarChart3,
   Store,
   Menu,
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { key: "materials", href: "/materials", label: "วัตถุดิบ", icon: Package },
   { key: "withdrawals", href: "/withdrawals", label: "เบิกวัตถุดิบ", icon: PackageMinus },
   { key: "dealers", href: "/dealers", label: "ตัวแทน", icon: Store },
+  { key: "finance", href: "/finance", label: "รายรับ-รายจ่าย", icon: Wallet },
   { key: "reports", href: "/reports", label: "รายงาน", icon: BarChart3 },
   { key: "audit", href: "/audit", label: "ประวัติการกระทำ", icon: ScrollText },
 ];

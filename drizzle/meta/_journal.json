@@ -15,6 +15,13 @@
       "when": 1777879698264,
       "tag": "0001_sturdy_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780045714441,
+      "tag": "0002_regular_kabuki",
+      "breakpoints": true
     }
   ]
 }

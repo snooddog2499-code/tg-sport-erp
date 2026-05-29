@@ -228,6 +228,18 @@ export const materialUsage = pgTable("material_usage", {
     .defaultNow(),
 });
 
+export const transactions = pgTable("transactions", {
+  id: serial("id").primaryKey(),
+  entryDate: text("entry_date").notNull(), // YYYY-MM-DD
+  type: text("type", { enum: ["income", "expense"] }).notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  amount: real("amount").notNull(),
+  note: text("note"),
+  recordedBy: integer("recorded_by").references(() => users.id),
+  ...timestamps,
+});
+
 export const materialWithdrawals = pgTable("material_withdrawals", {
   id: serial("id").primaryKey(),
   materialId: integer("material_id")

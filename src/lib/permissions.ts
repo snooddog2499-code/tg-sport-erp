@@ -25,7 +25,9 @@ export type Permission =
   | "reports:view"
   | "dealer:manage"
   | "dealer:self"
-  | "settings:manage";
+  | "settings:manage"
+  | "finance:view"
+  | "finance:manage";
 
 const ADMIN_SET: Permission[] = [
   "order:create",
@@ -43,6 +45,8 @@ const ADMIN_SET: Permission[] = [
   "hr:attendance",
   "reports:view",
   "dealer:manage",
+  "finance:view",
+  "finance:manage",
 ];
 
 const DEALER_SET: Permission[] = [
@@ -81,6 +85,8 @@ const PERMISSIONS: Record<Role, Permission[]> = {
     "reports:view",
     "dealer:manage",
     "settings:manage",
+    "finance:view",
+    "finance:manage",
   ],
   manager: [
     "order:create",
@@ -98,6 +104,8 @@ const PERMISSIONS: Record<Role, Permission[]> = {
     "audit:view",
     "material:manage",
     "material:use",
+    "finance:view",
+    "finance:manage",
   ],
   admin: ADMIN_SET,
   graphic: GRAPHIC_SET,
