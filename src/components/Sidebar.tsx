@@ -13,7 +13,6 @@ import {
   ScrollText,
   Package,
   PackageMinus,
-  BriefcaseBusiness,
   BarChart3,
   Store,
   Menu,
@@ -39,7 +38,6 @@ const navItems: NavItem[] = [
   { key: "materials", href: "/materials", label: "วัตถุดิบ", icon: Package },
   { key: "withdrawals", href: "/withdrawals", label: "เบิกวัตถุดิบ", icon: PackageMinus },
   { key: "dealers", href: "/dealers", label: "ตัวแทน", icon: Store },
-  { key: "employees", href: "/employees", label: "พนักงาน", icon: BriefcaseBusiness },
   { key: "reports", href: "/reports", label: "รายงาน", icon: BarChart3 },
   { key: "audit", href: "/audit", label: "ประวัติการกระทำ", icon: ScrollText },
 ];
