@@ -1,7 +1,13 @@
 import { db, schema } from "@/db";
 import { asc } from "drizzle-orm";
 import Link from "next/link";
-import { Package, PlusCircle, AlertTriangle, Boxes } from "lucide-react";
+import {
+  Package,
+  PlusCircle,
+  AlertTriangle,
+  Boxes,
+  CalendarDays,
+} from "lucide-react";
 import { formatBaht } from "@/lib/format";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -36,12 +42,21 @@ export default async function MaterialsPage() {
             จัดการคลังวัตถุดิบและสต็อก
           </p>
         </div>
-        {canManage && (
-          <Link href="/materials/new" className="btn btn-brand btn-sm">
-            <PlusCircle size={14} strokeWidth={2.5} />
-            เพิ่มวัตถุดิบ
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/materials/withdrawals"
+            className="btn btn-outline btn-sm"
+          >
+            <CalendarDays size={14} strokeWidth={2.5} />
+            ประวัติเบิกรายเดือน
           </Link>
-        )}
+          {canManage && (
+            <Link href="/materials/new" className="btn btn-brand btn-sm">
+              <PlusCircle size={14} strokeWidth={2.5} />
+              เพิ่มวัตถุดิบ
+            </Link>
+          )}
+        </div>
       </header>
 
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-6">
