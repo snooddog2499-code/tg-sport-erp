@@ -19,7 +19,9 @@ export type AuditAction =
   | "attendance_recorded"
   | "payroll_finalized"
   | "transaction_create"
-  | "transaction_delete";
+  | "transaction_delete"
+  | "finance_doc_create"
+  | "finance_doc_delete";
 
 export type AuditEntity =
   | "order"
@@ -37,7 +39,8 @@ export type AuditEntity =
   | "dealer_price"
   | "order_file"
   | "menu_access"
-  | "transaction";
+  | "transaction"
+  | "finance_document";
 
 export async function logAction(params: {
   userId?: number | null;

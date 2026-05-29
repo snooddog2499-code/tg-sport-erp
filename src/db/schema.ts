@@ -228,6 +228,67 @@ export const materialUsage = pgTable("material_usage", {
     .defaultNow(),
 });
 
+export const financeDocuments = pgTable("finance_documents", {
+  id: serial("id").primaryKey(),
+  docNo: text("doc_no").notNull().unique(),
+  type: text("type", { enum: ["income", "expense"] }).notNull(),
+  // Counterparty (vendor for expense, customer/payer for income)
+  vendorName: text("vendor_name").notNull(),
+  vendorAddress: text("vendor_address"),
+  vendorTaxId: text("vendor_tax_id"),
+  vendorBranch: text("vendor_branch"),
+  // Dates (YYYY-MM-DD strings)
+  docDate: text("doc_date").notNull(),
+  creditDays: integer("credit_days").notNull().default(0),
+  dueDate: text("due_date").notNull(),
+  // Reference info
+  referenceNo: text("reference_no"),
+  priceIncludesVat: boolean("price_includes_vat").notNull().default(false),
+  description: text("description"),
+  notes: text("notes"),
+  internalNotes: text("internal_notes"),
+  // Computed totals (snapshot at save time)
+  subtotal: real("subtotal").notNull().default(0),
+  discountPct: real("discount_pct").notNull().default(0),
+  discountAmount: real("discount_amount").notNull().default(0),
+  afterDiscount: real("after_discount").notNull().default(0),
+  vatEnabled: boolean("vat_enabled").notNull().default(false),
+  vatAmount: real("vat_amount").notNull().default(0),
+  withholdingEnabled: boolean("withholding_enabled").notNull().default(false),
+  withholdingPct: real("withholding_pct").notNull().default(3),
+  withholdingAmount: real("withholding_amount").notNull().default(0),
+  total: real("total").notNull().default(0),
+  recordedBy: integer("recorded_by").references(() => users.id),
+  ...timestamps,
+});
+
+export const financeDocumentLines = pgTable("finance_document_lines", {
+  id: serial("id").primaryKey(),
+  documentId: integer("document_id")
+    .notNull()
+    .references(() => financeDocuments.id, { onDelete: "cascade" }),
+  lineNo: integer("line_no").notNull(),
+  description: text("description").notNull(),
+  qty: real("qty").notNull().default(1),
+  unitPrice: real("unit_price").notNull().default(0),
+  total: real("total").notNull().default(0),
+});
+
+export const financeDocumentFiles = pgTable("finance_document_files", {
+  id: serial("id").primaryKey(),
+  documentId: integer("document_id")
+    .notNull()
+    .references(() => financeDocuments.id, { onDelete: "cascade" }),
+  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  uploadedBy: integer("uploaded_by").references(() => users.id),
+  createdAt: timestamp("created_at", { mode: "string", withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   entryDate: text("entry_date").notNull(), // YYYY-MM-DD

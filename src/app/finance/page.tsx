@@ -17,6 +17,7 @@ import {
   TrendingDown,
   Receipt,
   Plus,
+  FileText,
 } from "lucide-react";
 import { TXN_TYPE_LABELS, type TxnType } from "@/lib/finance-types";
 
@@ -157,6 +158,31 @@ export default async function FinancePage({
     )
     .orderBy(desc(schema.transactions.entryDate));
 
+  // Fetch finance documents (FlowAccount-style entries) for the month
+  const docs = await db
+    .select({
+      id: schema.financeDocuments.id,
+      docNo: schema.financeDocuments.docNo,
+      type: schema.financeDocuments.type,
+      vendorName: schema.financeDocuments.vendorName,
+      docDate: schema.financeDocuments.docDate,
+      description: schema.financeDocuments.description,
+      total: schema.financeDocuments.total,
+      userName: schema.users.name,
+    })
+    .from(schema.financeDocuments)
+    .leftJoin(
+      schema.users,
+      eq(schema.financeDocuments.recordedBy, schema.users.id)
+    )
+    .where(
+      and(
+        gte(schema.financeDocuments.docDate, monthStartYmd),
+        lt(schema.financeDocuments.docDate, nextMonthStartYmd)
+      )
+    )
+    .orderBy(desc(schema.financeDocuments.docDate));
+
   // Fetch payments (order income) for the month
   const payRows = await db
     .select({
@@ -205,9 +231,26 @@ export default async function FinancePage({
     orderId?: number | null;
     orderCode?: string | null;
     txnId?: number; // present only for manual transactions
+    docId?: number; // present for finance documents
+    docNo?: string;
   };
 
   const unified: UnifiedEntry[] = [];
+  for (const d of docs) {
+    unified.push({
+      key: `d-${d.id}`,
+      date: d.docDate,
+      type: d.type as TxnType,
+      category: `เอกสาร ${d.docNo}`,
+      description: `${d.vendorName}${d.description ? " · " + d.description : ""}`,
+      amount: d.total,
+      note: null,
+      by: d.userName,
+      isOrderPayment: false,
+      docId: d.id,
+      docNo: d.docNo,
+    });
+  }
   for (const t of txns) {
     unified.push({
       key: `t-${t.id}`,
@@ -301,29 +344,37 @@ export default async function FinancePage({
             ดูภาพรวมเงินเข้า-ออกในแต่ละเดือน — รวมรับชำระจากออเดอร์โดยอัตโนมัติ
           </p>
         </div>
-        <div className="inline-flex items-center gap-1">
-          <Link
-            href={`/finance?ym=${prevYm}${view === "all" ? "" : `&view=${view}`}`}
-            className="btn btn-ghost btn-sm"
-            aria-label="เดือนก่อนหน้า"
-          >
-            <ChevronLeft size={16} />
-          </Link>
-          <div className="px-4 py-1.5 text-sm font-semibold text-ink-900 min-w-[180px] text-center bg-white border border-zinc-200 rounded-md">
-            {monthLabel}
-          </div>
-          <Link
-            href={`/finance?ym=${nextYm}${view === "all" ? "" : `&view=${view}`}`}
-            className="btn btn-ghost btn-sm"
-            aria-label="เดือนถัดไป"
-          >
-            <ChevronRight size={16} />
-          </Link>
-          {!isCurrentMonth && (
-            <Link href="/finance" className="btn btn-outline btn-sm ml-1">
-              เดือนปัจจุบัน
+        <div className="flex items-center gap-2 flex-wrap">
+          {canManage && (
+            <Link href="/finance/new" className="btn btn-brand btn-sm">
+              <FileText size={14} strokeWidth={2.5} />
+              สร้างเอกสาร
             </Link>
           )}
+          <div className="inline-flex items-center gap-1">
+            <Link
+              href={`/finance?ym=${prevYm}${view === "all" ? "" : `&view=${view}`}`}
+              className="btn btn-ghost btn-sm"
+              aria-label="เดือนก่อนหน้า"
+            >
+              <ChevronLeft size={16} />
+            </Link>
+            <div className="px-4 py-1.5 text-sm font-semibold text-ink-900 min-w-[160px] text-center bg-white border border-zinc-200 rounded-md">
+              {monthLabel}
+            </div>
+            <Link
+              href={`/finance?ym=${nextYm}${view === "all" ? "" : `&view=${view}`}`}
+              className="btn btn-ghost btn-sm"
+              aria-label="เดือนถัดไป"
+            >
+              <ChevronRight size={16} />
+            </Link>
+            {!isCurrentMonth && (
+              <Link href="/finance" className="btn btn-outline btn-sm ml-1">
+                เดือนปัจจุบัน
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
@@ -538,7 +589,16 @@ export default async function FinancePage({
                           />
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-ink-900 truncate">
-                              {e.description}
+                              {e.docId ? (
+                                <Link
+                                  href={`/finance/${e.docId}`}
+                                  className="hover:text-brand-600"
+                                >
+                                  {e.description}
+                                </Link>
+                              ) : (
+                                e.description
+                              )}
                             </p>
                             <p className="text-[11px] text-zinc-500 truncate">
                               <span className="inline-flex items-center text-[10px] font-medium text-zinc-700 bg-zinc-100 px-1.5 py-0.5 rounded mr-1.5">
