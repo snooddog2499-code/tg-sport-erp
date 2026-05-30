@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import TransactionForm from "./transaction-form";
-import { Wallet, FileText, Plus, BarChart3 } from "lucide-react";
+import { Wallet, FileText, Plus } from "lucide-react";
 
 export const metadata = { title: "รายรับ-รายจ่าย — TG Sport ERP" };
 
@@ -63,23 +63,6 @@ export default async function FinancePage() {
         </section>
       )}
 
-      <section className="mt-6 p-4 bg-blue-50/40 border border-blue-200 rounded-lg flex items-start gap-3">
-        <BarChart3
-          size={18}
-          strokeWidth={2}
-          className="text-blue-600 flex-shrink-0 mt-0.5"
-        />
-        <div className="text-xs text-blue-900">
-          <p className="font-medium mb-1">ดูภาพรวมรายรับ-รายจ่าย</p>
-          <p className="text-blue-800">
-            ตัวเลขสรุปทั้งหมด (รายรับ, รายจ่าย, กำไรสุทธิ) ย้ายไปอยู่ที่{" "}
-            <Link href="/" className="font-medium underline">
-              แดชบอร์ด
-            </Link>{" "}
-            แล้ว — เลือกช่วงเวลาได้ทั้ง วันนี้ / สัปดาห์ / 30 วัน / เลือกช่วง
-          </p>
-        </div>
-      </section>
     </div>
   );
 }
