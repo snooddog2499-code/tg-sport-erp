@@ -17,10 +17,23 @@ export type MenuItem = {
   label: string;
   href: string;
   defaultLevel: AccessLevel;
+  /**
+   * Roles for which this menu is hidden by default, even if defaultLevel
+   * would otherwise grant access. Owner can still grant the menu to an
+   * individual user via /settings/permissions if needed.
+   */
+  hiddenForRoles?: string[];
 };
 
 export const MENU_ITEMS: MenuItem[] = [
-  { key: "home", label: "แดชบอร์ด", href: "/", defaultLevel: "staff" },
+  {
+    key: "home",
+    label: "แดชบอร์ด",
+    href: "/",
+    defaultLevel: "staff",
+    // Per request — แอดมินไม่เห็นแดชบอร์ดเป็น default
+    hiddenForRoles: ["admin"],
+  },
   { key: "orders", label: "ออเดอร์", href: "/orders", defaultLevel: "staff" },
   { key: "production", label: "การผลิต", href: "/production", defaultLevel: "staff" },
   { key: "materials", label: "วัตถุดิบ", href: "/materials", defaultLevel: "admin" },
@@ -39,4 +52,13 @@ export function levelAllows(role: string, level: AccessLevel): boolean {
   if (level === "admin") return ADMIN_ROLES.includes(role);
   if (level === "owner") return OWNER_ROLES.includes(role);
   return false;
+}
+
+/**
+ * Whether a given menu is visible to a role by default — combines
+ * levelAllows() with the per-item hiddenForRoles exclusion list.
+ */
+export function defaultAllows(role: string, item: MenuItem): boolean {
+  if (item.hiddenForRoles?.includes(role)) return false;
+  return levelAllows(role, item.defaultLevel);
 }

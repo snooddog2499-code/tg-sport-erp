@@ -4,7 +4,7 @@ import { requirePerm } from "@/lib/permissions";
 import {
   MENU_ITEMS,
   loadAllMenuOverrides,
-  levelAllows,
+  defaultAllows,
 } from "@/lib/menu-access";
 import { Settings, Crown, Lock } from "lucide-react";
 import UserPermissionsRow from "./user-permissions-row";
@@ -89,9 +89,9 @@ export default async function PermissionsPage() {
                 const allowedKeys = userOverrides
                   ? userOverrides
                   : new Set(
-                      MENU_ITEMS.filter((m) =>
-                        levelAllows(u.role, m.defaultLevel)
-                      ).map((m) => m.key)
+                      MENU_ITEMS.filter((m) => defaultAllows(u.role, m)).map(
+                        (m) => m.key
+                      )
                     );
                 const hasOverrides = !!userOverrides;
                 return (

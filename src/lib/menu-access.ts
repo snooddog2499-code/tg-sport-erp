@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import type { CurrentUser } from "./auth";
 import {
   MENU_ITEMS,
-  levelAllows,
+  defaultAllows,
   type AccessLevel,
   type MenuItem,
 } from "./menu-access-types";
@@ -14,6 +14,7 @@ export {
   ACCESS_LEVEL_LABEL,
   ACCESS_LEVEL_HINT,
   levelAllows,
+  defaultAllows,
 } from "./menu-access-types";
 export type { AccessLevel, MenuItem } from "./menu-access-types";
 
@@ -44,10 +45,10 @@ export async function loadAllMenuOverrides(): Promise<
   return map;
 }
 
-// Default menu visibility based on user role + menu default level
+// Default menu visibility based on user role + per-item exclusion list
 function defaultVisibleKeys(role: string): Set<string> {
   return new Set(
-    MENU_ITEMS.filter((item) => levelAllows(role, item.defaultLevel)).map(
+    MENU_ITEMS.filter((item) => defaultAllows(role, item)).map(
       (item) => item.key
     )
   );
