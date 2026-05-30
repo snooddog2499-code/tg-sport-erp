@@ -141,12 +141,10 @@ export async function createOrder(
     return { errors: { items: ["กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ"] } };
   }
 
-  // Enforce per-order minimum qty (sum of items) — keeps the existing
-  // "ขั้นต่ำ 5 ตัว" rule but applied at the order level so a small pant
-  // line item doesn't get rejected on its own.
+  // Order-level minimum qty (1 unit) — at least 1 item with qty > 0.
   const totalQty = items.reduce((s, it) => s + it.qty, 0);
-  if (totalQty < 5) {
-    return { errors: { items: ["จำนวนรวมทุกรายการขั้นต่ำ 5 ตัว"] } };
+  if (totalQty < 1) {
+    return { errors: { items: ["จำนวนรวมทุกรายการขั้นต่ำ 1 ตัว"] } };
   }
 
   const currentUser = await getCurrentUser();

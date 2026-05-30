@@ -6,9 +6,9 @@ export const settings = {
   },
 
   pricing: {
-    minimumQty: 5,
+    minimumQty: 1,
     tiers: [
-      { minQty: 5, discount: 0 },
+      { minQty: 1, discount: 0 },
       { minQty: 20, discount: 0.05 },
       { minQty: 50, discount: 0.1 },
     ],
