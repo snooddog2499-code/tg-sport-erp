@@ -31,8 +31,17 @@ export const MENU_ITEMS: MenuItem[] = [
     label: "แดชบอร์ด",
     href: "/",
     defaultLevel: "staff",
-    // Per request — แอดมินไม่เห็นแดชบอร์ดเป็น default
-    hiddenForRoles: ["admin"],
+    // Per request — เห็นเฉพาะ owner + manager
+    // (admin + ช่างทุกแผนกไม่เห็นแดชบอร์ดเป็น default)
+    hiddenForRoles: [
+      "admin",
+      "graphic",
+      "print",
+      "roll",
+      "laser",
+      "sew",
+      "qc",
+    ],
   },
   { key: "orders", label: "ออเดอร์", href: "/orders", defaultLevel: "staff" },
   { key: "production", label: "การผลิต", href: "/production", defaultLevel: "staff" },
