@@ -15,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRight,
+  ArrowUpCircle,
+  ArrowDownCircle,
   Palette,
   Printer,
   Flame,
@@ -234,12 +236,19 @@ export default async function Home({
   );
   const isMultiDay = rangeDays > 1;
 
+  // YYYY-MM-DD bounds for tables whose date column is a text/date type
+  // (transactions.entry_date, finance_documents.doc_date)
+  const startYmd = formatLocalYmd(start);
+  const endYmd = formatLocalYmd(end);
+
   const [
     ordersOfRange,
     paymentsOfRange,
     stagesDoneOfRange,
     deliveredOfRange,
     orderCreatedRows,
+    txnAgg,
+    docAgg,
   ] = await Promise.all([
     db
       .select({
@@ -319,7 +328,59 @@ export default async function Home({
       )
       .orderBy(desc(schema.orders.createdAt))
       .limit(20),
+    // Manual income/expense entries within the range
+    db
+      .select({
+        type: schema.transactions.type,
+        total:
+          sql<number>`coalesce(sum(${schema.transactions.amount}), 0)::float`.mapWith(
+            Number
+          ),
+      })
+      .from(schema.transactions)
+      .where(
+        and(
+          gte(schema.transactions.entryDate, startYmd),
+          lt(schema.transactions.entryDate, endYmd)
+        )
+      )
+      .groupBy(schema.transactions.type),
+    // FlowAccount-style finance documents within the range
+    db
+      .select({
+        type: schema.financeDocuments.type,
+        total:
+          sql<number>`coalesce(sum(${schema.financeDocuments.total}), 0)::float`.mapWith(
+            Number
+          ),
+      })
+      .from(schema.financeDocuments)
+      .where(
+        and(
+          gte(schema.financeDocuments.docDate, startYmd),
+          lt(schema.financeDocuments.docDate, endYmd)
+        )
+      )
+      .groupBy(schema.financeDocuments.type),
   ]);
+
+  // Combine income/expense from 3 sources for the finance summary card row
+  const orderIncome = Number(paymentsOfRange[0]?.totalSum ?? 0);
+  const txnIncome = Number(
+    txnAgg.find((r) => r.type === "income")?.total ?? 0
+  );
+  const txnExpense = Number(
+    txnAgg.find((r) => r.type === "expense")?.total ?? 0
+  );
+  const docIncome = Number(
+    docAgg.find((r) => r.type === "income")?.total ?? 0
+  );
+  const docExpense = Number(
+    docAgg.find((r) => r.type === "expense")?.total ?? 0
+  );
+  const totalIncome = orderIncome + txnIncome + docIncome;
+  const totalExpense = txnExpense + docExpense;
+  const netCashflow = totalIncome - totalExpense;
 
   const orderCount = ordersOfRange[0]?.count ?? 0;
   const orderTotal = Number(ordersOfRange[0]?.totalSum ?? 0);
@@ -538,6 +599,83 @@ export default async function Home({
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* Finance summary — moved here from /finance per request */}
+      <section className="card overflow-hidden mb-6">
+        <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="font-semibold text-ink-900 text-sm flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 ring-1 ring-brand-200/60 shadow-sm">
+              <Wallet size={14} strokeWidth={2} />
+            </span>
+            รายรับ-รายจ่าย{isMultiDay ? "ในช่วงนี้" : "ในวันนี้"}
+          </h2>
+          <Link
+            href="/finance"
+            className="text-xs text-zinc-600 hover:text-ink-900 flex items-center gap-1 group"
+          >
+            เพิ่มรายการ
+            <ArrowRight
+              size={12}
+              className="transition-transform group-hover:translate-x-0.5"
+            />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100">
+          <div className="p-4 md:p-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-2 shadow-sm bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-700 ring-1 ring-emerald-200/60">
+              <ArrowUpCircle size={20} strokeWidth={2} />
+            </div>
+            <p className="text-xs text-zinc-500 font-medium uppercase tracking-wide">
+              รายรับ
+            </p>
+            <p className="text-xl md:text-2xl font-bold text-emerald-700 mt-1 tabular-nums tracking-tight">
+              {formatBaht(totalIncome)}
+            </p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">
+              รวมรับชำระจากออเดอร์
+            </p>
+          </div>
+          <div className="p-4 md:p-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-2 shadow-sm bg-gradient-to-br from-rose-50 to-rose-100 text-rose-700 ring-1 ring-rose-200/60">
+              <ArrowDownCircle size={20} strokeWidth={2} />
+            </div>
+            <p className="text-xs text-zinc-500 font-medium uppercase tracking-wide">
+              รายจ่าย
+            </p>
+            <p className="text-xl md:text-2xl font-bold text-rose-700 mt-1 tabular-nums tracking-tight">
+              {formatBaht(totalExpense)}
+            </p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">
+              วัตถุดิบ + ค่าใช้จ่ายต่าง ๆ
+            </p>
+          </div>
+          <div className="p-4 md:p-5">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 shadow-sm ring-1 ${
+                netCashflow >= 0
+                  ? "bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 ring-brand-200/60"
+                  : "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-700 ring-amber-200/60"
+              }`}
+            >
+              <Wallet size={20} strokeWidth={2} />
+            </div>
+            <p className="text-xs text-zinc-500 font-medium uppercase tracking-wide">
+              กำไรสุทธิ
+            </p>
+            <p
+              className={`text-xl md:text-2xl font-bold mt-1 tabular-nums tracking-tight ${
+                netCashflow >= 0 ? "text-emerald-700" : "text-rose-700"
+              }`}
+            >
+              {netCashflow >= 0 ? "+" : "-"}
+              {formatBaht(Math.abs(netCashflow))}
+            </p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">
+              รายรับ − รายจ่าย
+            </p>
+          </div>
         </div>
       </section>
 
