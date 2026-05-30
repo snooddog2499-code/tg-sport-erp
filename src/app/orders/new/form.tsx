@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createOrder, type OrderFormState } from "@/actions/orders";
 import { settings } from "@/lib/settings";
 import AttachmentUploader from "@/components/AttachmentUploader";
+import { Plus, Trash2 } from "lucide-react";
 
 type CustomerOption = {
   id: number;
@@ -43,6 +44,49 @@ function pickDealerPrice(
   return matches[0]?.price ?? null;
 }
 
+const BIG_SIZES_SET = ["3XL", "4XL", "5XL", "6XL", "7XL", "8XL", "9XL", "10XL"];
+const BIG_SIZE_FEE = 30;
+
+type ItemState = {
+  id: string;
+  garmentType: string;
+  collar: string;
+  qty: string;
+  unitPrice: string;
+  sizes: Record<string, string>;
+};
+
+function emptySizes(): Record<string, string> {
+  return Object.fromEntries(settings.sizes.map((s) => [s, ""]));
+}
+
+function makeItem(qty = String(settings.pricing.minimumQty)): ItemState {
+  return {
+    id: Math.random().toString(36).slice(2, 10),
+    garmentType: "",
+    collar: "",
+    qty,
+    unitPrice: "",
+    sizes: emptySizes(),
+  };
+}
+
+function sizeBreakdownJsonOf(sizes: Record<string, string>): string {
+  const obj: Record<string, number> = {};
+  for (const [k, v] of Object.entries(sizes)) {
+    const n = parseInt(v, 10) || 0;
+    if (n > 0) obj[k] = n;
+  }
+  return Object.keys(obj).length > 0 ? JSON.stringify(obj) : "";
+}
+
+function bigSizeQtyOf(sizes: Record<string, string>): number {
+  return Object.entries(sizes).reduce((acc, [k, v]) => {
+    if (BIG_SIZES_SET.includes(k)) return acc + (parseInt(v, 10) || 0);
+    return acc;
+  }, 0);
+}
+
 export default function NewOrderForm({
   customers,
   dealers,
@@ -65,31 +109,32 @@ export default function NewOrderForm({
   const [dealerId, setDealerId] = useState<number | null>(
     isDealer ? currentDealerId : null
   );
-  const [garmentType, setGarmentType] = useState("");
-  const [qty, setQty] = useState<string>(String(settings.pricing.minimumQty));
-  const [unitPrice, setUnitPrice] = useState<string>("");
   const [customerName, setCustomerName] = useState("");
   const [requiresDeposit, setRequiresDeposit] = useState(true);
   const [discount, setDiscount] = useState("");
   const [shipping, setShipping] = useState("");
   const [vatEnabled, setVatEnabled] = useState(false);
-  const [sizes, setSizes] = useState<Record<string, string>>(() =>
-    Object.fromEntries(settings.sizes.map((s) => [s, ""]))
-  );
 
-  const sizeTotal = Object.values(sizes).reduce(
-    (acc, v) => acc + (parseInt(v, 10) || 0),
-    0
-  );
+  const [items, setItems] = useState<ItemState[]>(() => [makeItem()]);
 
-  const sizeBreakdownJson = useMemo(() => {
-    const obj: Record<string, number> = {};
-    for (const [k, v] of Object.entries(sizes)) {
-      const n = parseInt(v, 10) || 0;
-      if (n > 0) obj[k] = n;
-    }
-    return Object.keys(obj).length > 0 ? JSON.stringify(obj) : "";
-  }, [sizes]);
+  function updateItem(id: string, patch: Partial<ItemState>) {
+    setItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, ...patch } : it))
+    );
+  }
+  function updateItemSize(id: string, size: string, v: string) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === id ? { ...it, sizes: { ...it.sizes, [size]: v } } : it
+      )
+    );
+  }
+  function addItem() {
+    setItems((prev) => [...prev, makeItem("0")]);
+  }
+  function removeItem(id: string) {
+    setItems((prev) => (prev.length > 1 ? prev.filter((i) => i.id !== id) : prev));
+  }
 
   const matchedCustomer = customers.find(
     (c) => c.name.toLowerCase() === customerName.trim().toLowerCase()
@@ -100,26 +145,38 @@ export default function NewOrderForm({
       : "new"
     : "empty";
 
-  const qtyNum = parseInt(qty, 10) || 0;
-  const unitPriceNum = parseFloat(unitPrice) || 0;
+  // Per-item derived values
+  const itemTotals = items.map((it) => {
+    const qty = parseInt(it.qty, 10) || 0;
+    const unitPrice = parseFloat(it.unitPrice) || 0;
+    const itemSubtotal = qty * unitPrice;
+    const bigQty = bigSizeQtyOf(it.sizes);
+    const itemSurcharge = bigQty * BIG_SIZE_FEE;
+    const sizeTotal = Object.values(it.sizes).reduce(
+      (acc, v) => acc + (parseInt(v, 10) || 0),
+      0
+    );
+    const autoPrice = pickDealerPrice(
+      dealerPrices,
+      dealerId,
+      it.garmentType,
+      qty
+    );
+    return {
+      qty,
+      unitPrice,
+      itemSubtotal,
+      bigQty,
+      itemSurcharge,
+      sizeTotal,
+      autoPrice,
+    };
+  });
+  const subtotal = itemTotals.reduce((s, t) => s + t.itemSubtotal, 0);
+  const sizeSurcharge = itemTotals.reduce((s, t) => s + t.itemSurcharge, 0);
+  const totalQty = itemTotals.reduce((s, t) => s + t.qty, 0);
 
-  const autoPrice = useMemo(
-    () => pickDealerPrice(dealerPrices, dealerId, garmentType, qtyNum),
-    [dealerPrices, dealerId, garmentType, qtyNum]
-  );
-
-  const subtotal = qtyNum * unitPriceNum;
-  const BIG_SIZES_SET = ["3XL", "4XL", "5XL", "6XL", "7XL", "8XL", "9XL", "10XL"];
-  const BIG_SIZE_FEE = 30;
-  const bigSizeQty = Object.entries(sizes).reduce((acc, [k, v]) => {
-    if (BIG_SIZES_SET.includes(k)) {
-      return acc + (parseInt(v, 10) || 0);
-    }
-    return acc;
-  }, 0);
-  const sizeSurcharge = bigSizeQty * BIG_SIZE_FEE;
-
-  // Auto-apply customer promo (free shipping + percentage discount) when matched
+  // Auto-apply customer promo (free shipping + percentage discount)
   const promoSubtotalRef = useRef(subtotal);
   useEffect(() => {
     if (matchedCustomer && subtotal > 0) {
@@ -129,7 +186,6 @@ export default function NewOrderForm({
         const current = parseFloat(discount) || 0;
         if (
           current === 0 ||
-          // re-apply if subtotal changed and old discount looks auto-set
           Math.abs(
             current -
               (promoSubtotalRef.current *
@@ -186,7 +242,13 @@ export default function NewOrderForm({
             <option
               key={c.id}
               value={c.name}
-              label={c.tier === "vip" ? "⭐ VIP" : c.tier === "regular" ? "ประจำ" : "ใหม่"}
+              label={
+                c.tier === "vip"
+                  ? "⭐ VIP"
+                  : c.tier === "regular"
+                    ? "ประจำ"
+                    : "ใหม่"
+              }
             />
           ))}
         </datalist>
@@ -212,10 +274,9 @@ export default function NewOrderForm({
           </div>
         )}
         {customerStatus === "new" && (
-          <p className="text-[11px] text-brand-600 mt-1">
-            + ลูกค้าใหม่ &mdash; ระบบจะเพิ่ม &quot;{customerName.trim()}&quot;
-            ให้อัตโนมัติเมื่อบันทึกออเดอร์ (กรอกข้อมูลติดต่อด้านล่างเพื่อใช้กับใบเสนอราคา/ใบส่งของ)
-          </p>
+          <div className="text-[11px] text-amber-700 mt-1">
+            + ลูกค้าใหม่ — จะถูกเพิ่มเข้าระบบเมื่อบันทึก
+          </div>
         )}
       </Field>
 
@@ -225,10 +286,7 @@ export default function NewOrderForm({
             ข้อมูลติดต่อลูกค้าใหม่ (ไม่บังคับ — เพิ่มเติมภายหลังได้ที่ /customers)
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field
-              label="เบอร์โทร"
-              error={state.errors?.customerPhone}
-            >
+            <Field label="เบอร์โทร" error={state.errors?.customerPhone}>
               <input
                 name="customerPhone"
                 type="tel"
@@ -260,134 +318,211 @@ export default function NewOrderForm({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label="ประเภทเสื้อ" required error={state.errors?.garmentType}>
-          <select
-            name="garmentType"
-            required
-            value={garmentType}
-            onChange={(e) => setGarmentType(e.target.value)}
-            className="input"
+      {/* Items section — multi-item */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-700">
+            รายการสินค้า ({items.length} {items.length > 1 ? "รายการ" : "รายการ"})
+          </h2>
+          <button
+            type="button"
+            onClick={addItem}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded-md border border-brand-200 hover:border-brand-400 transition-colors"
           >
-            <option value="" disabled>
-              -- เลือก --
-            </option>
-            {settings.garmentTypes.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="แบบคอเสื้อ" error={state.errors?.collar}>
-          <select name="collar" defaultValue="" className="input">
-            <option value="">— ยังไม่ระบุ —</option>
-            {settings.collarTypes.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label="จำนวนรวม (ตัว)" required error={state.errors?.qty}>
-          <input
-            name="qty"
-            type="number"
-            min={settings.pricing.minimumQty}
-            required
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            className="input"
-          />
-          {sizeTotal > 0 && (
-            <p
-              className={`text-[11px] mt-1 ${
-                sizeTotal === (parseInt(qty, 10) || 0)
-                  ? "text-emerald-600"
-                  : "text-amber-700"
-              }`}
+            <Plus size={13} strokeWidth={2.5} />
+            เพิ่มรายการ (เช่น กางเกง)
+          </button>
+        </div>
+        {items.map((item, idx) => {
+          const t = itemTotals[idx];
+          return (
+            <div
+              key={item.id}
+              className="border border-zinc-200 rounded-lg p-4 bg-zinc-50/40 space-y-4"
             >
-              {sizeTotal === (parseInt(qty, 10) || 0) ? "✓" : "⚠"} ผลรวมไซส์ ={" "}
-              {sizeTotal} ตัว
-              {sizeTotal !== (parseInt(qty, 10) || 0) && (
-                <button
-                  type="button"
-                  onClick={() => setQty(String(sizeTotal))}
-                  className="ml-2 text-brand-600 hover:underline"
-                >
-                  ใช้ค่านี้
-                </button>
-              )}
-            </p>
-          )}
-        </Field>
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-100 text-brand-700 text-xs font-bold">
+                  {idx + 1}
+                </span>
+                <span className="text-xs text-zinc-500 ml-auto">
+                  {item.garmentType || "—"} · {t.qty} ตัว
+                  {t.itemSubtotal > 0 && (
+                    <span className="ml-1.5 font-medium text-ink-900">
+                      ฿{fmt(t.itemSubtotal)}
+                    </span>
+                  )}
+                </span>
+                {items.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    className="text-zinc-400 hover:text-red-600 p-1"
+                    title="ลบรายการนี้"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Hidden inputs for server action — parallel arrays */}
+              <input type="hidden" name="itemGarmentType" value={item.garmentType} />
+              <input type="hidden" name="itemCollar" value={item.collar} />
+              <input type="hidden" name="itemQty" value={item.qty} />
+              <input
+                type="hidden"
+                name="itemUnitPrice"
+                value={item.unitPrice || "0"}
+              />
+              <input
+                type="hidden"
+                name="itemSizeBreakdownJson"
+                value={sizeBreakdownJsonOf(item.sizes)}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="ประเภท" required>
+                  <select
+                    required
+                    value={item.garmentType}
+                    onChange={(e) =>
+                      updateItem(item.id, { garmentType: e.target.value })
+                    }
+                    className="input"
+                  >
+                    <option value="" disabled>
+                      -- เลือก --
+                    </option>
+                    {settings.garmentTypes.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="แบบคอ / ทรง">
+                  <select
+                    value={item.collar}
+                    onChange={(e) =>
+                      updateItem(item.id, { collar: e.target.value })
+                    }
+                    className="input"
+                  >
+                    <option value="">— ยังไม่ระบุ —</option>
+                    {settings.collarTypes.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
+              <Field label="จำนวนรวม (ตัว)" required>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={item.qty}
+                  onChange={(e) =>
+                    updateItem(item.id, { qty: e.target.value })
+                  }
+                  className="input"
+                />
+                {t.sizeTotal > 0 && (
+                  <p
+                    className={`text-[11px] mt-1 ${
+                      t.sizeTotal === t.qty
+                        ? "text-emerald-600"
+                        : "text-amber-700"
+                    }`}
+                  >
+                    {t.sizeTotal === t.qty ? "✓" : "⚠"} ผลรวมไซส์ ={" "}
+                    {t.sizeTotal} ตัว
+                    {t.sizeTotal !== t.qty && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateItem(item.id, { qty: String(t.sizeTotal) })
+                        }
+                        className="ml-2 text-brand-600 hover:underline"
+                      >
+                        ใช้ค่านี้
+                      </button>
+                    )}
+                  </p>
+                )}
+              </Field>
+
+              <Field label="แยกไซส์ (ไม่บังคับ — ไซส์ 3XL ขึ้นไปบวก ฿30/ตัว)">
+                <SizeGrid label="เด็ก">
+                  {settings.sizes
+                    .filter((s) => s.startsWith("K"))
+                    .map((s) => (
+                      <SizeInput
+                        key={s}
+                        size={s}
+                        value={item.sizes[s]}
+                        onChange={(v) => updateItemSize(item.id, s, v)}
+                      />
+                    ))}
+                </SizeGrid>
+                <SizeGrid label="ผู้ใหญ่">
+                  {settings.sizes
+                    .filter((s) => !s.startsWith("K"))
+                    .map((s) => (
+                      <SizeInput
+                        key={s}
+                        size={s}
+                        value={item.sizes[s]}
+                        onChange={(v) => updateItemSize(item.id, s, v)}
+                      />
+                    ))}
+                </SizeGrid>
+              </Field>
+
+              <Field label="ราคา/ตัว (บาท)">
+                <div>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={item.unitPrice}
+                    onChange={(e) =>
+                      updateItem(item.id, { unitPrice: e.target.value })
+                    }
+                    className="input"
+                    placeholder="ใส่ 0 ถ้ายังไม่ตกลง"
+                  />
+                  {t.autoPrice !== null && t.autoPrice !== t.unitPrice && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateItem(item.id, {
+                          unitPrice: String(t.autoPrice),
+                        })
+                      }
+                      className="text-[11px] text-brand-600 hover:underline mt-1"
+                    >
+                      ใช้ราคาตัวแทน ฿{t.autoPrice.toLocaleString("th-TH")} / ตัว
+                    </button>
+                  )}
+                  {t.autoPrice !== null && t.autoPrice === t.unitPrice && (
+                    <p className="text-[11px] text-emerald-600 mt-1">
+                      ✓ ใช้ราคาตัวแทน ฿{t.autoPrice.toLocaleString("th-TH")}
+                    </p>
+                  )}
+                </div>
+              </Field>
+            </div>
+          );
+        })}
+        {state.errors?.items && (
+          <p className="text-xs text-red-600">{state.errors.items[0]}</p>
+        )}
       </div>
 
-      <Field label="แยกไซส์ (ไม่บังคับ — ไซส์ 3XL ขึ้นไปบวก ฿30/ตัว)">
-        <input type="hidden" name="sizeBreakdownJson" value={sizeBreakdownJson} />
-        <SizeGrid label="เด็ก">
-          {settings.sizes
-            .filter((s) => s.startsWith("K"))
-            .map((s) => (
-              <SizeInput
-                key={s}
-                size={s}
-                value={sizes[s]}
-                onChange={(v) =>
-                  setSizes((prev) => ({ ...prev, [s]: v }))
-                }
-              />
-            ))}
-        </SizeGrid>
-        <SizeGrid label="ผู้ใหญ่">
-          {settings.sizes
-            .filter((s) => !s.startsWith("K"))
-            .map((s) => (
-              <SizeInput
-                key={s}
-                size={s}
-                value={sizes[s]}
-                onChange={(v) =>
-                  setSizes((prev) => ({ ...prev, [s]: v }))
-                }
-              />
-            ))}
-        </SizeGrid>
-      </Field>
-
+      {/* Order-level fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label="ราคา/ตัว (บาท)" error={state.errors?.unitPrice}>
-          <div>
-            <input
-              name="unitPrice"
-              type="number"
-              min={0}
-              step="0.01"
-              value={unitPrice}
-              onChange={(e) => setUnitPrice(e.target.value)}
-              className="input"
-              placeholder="ใส่ 0 ถ้ายังไม่ตกลง"
-            />
-            {autoPrice !== null && autoPrice !== unitPriceNum && (
-              <button
-                type="button"
-                onClick={() => setUnitPrice(String(autoPrice))}
-                className="text-[11px] text-brand-600 hover:underline mt-1"
-              >
-                ใช้ราคาตัวแทน ฿{autoPrice.toLocaleString("th-TH")} / ตัว
-              </button>
-            )}
-            {autoPrice !== null && autoPrice === unitPriceNum && (
-              <p className="text-[11px] text-emerald-600 mt-1">
-                ✓ ใช้ราคาตัวแทน ฿{autoPrice.toLocaleString("th-TH")}
-              </p>
-            )}
-          </div>
-        </Field>
         <Field label="วันที่ต้องการรับของ" error={state.errors?.deadline}>
           <input name="deadline" type="date" className="input" />
         </Field>
@@ -440,10 +575,10 @@ export default function NewOrderForm({
         <div className="bg-zinc-50 border border-zinc-200 rounded-md p-4 text-sm">
           <p className="text-xs font-medium text-zinc-500 mb-2">สรุปยอด</p>
           <dl className="space-y-1">
-            <Row dt="ยอดสินค้า" dd={fmt(subtotal)} />
+            <Row dt={`ยอดสินค้า (${totalQty} ตัว)`} dd={fmt(subtotal)} />
             {sizeSurcharge > 0 && (
               <Row
-                dt={`เพิ่มไซส์ใหญ่ (${bigSizeQty} ตัว × ${BIG_SIZE_FEE})`}
+                dt={`เพิ่มไซส์ใหญ่ × ${BIG_SIZE_FEE}`}
                 dd={`+ ${fmt(sizeSurcharge)}`}
                 tone="text-amber-700"
               />
@@ -465,9 +600,7 @@ export default function NewOrderForm({
             {shippingAmt > 0 && (
               <Row dt="ค่าขนส่ง" dd={`+ ${fmt(shippingAmt)}`} />
             )}
-            {vatEnabled && (
-              <Row dt="VAT 7%" dd={`+ ${fmt(vatAmt)}`} />
-            )}
+            {vatEnabled && <Row dt="VAT 7%" dd={`+ ${fmt(vatAmt)}`} />}
             <div className="border-t border-zinc-200 mt-2 pt-2">
               <Row
                 dt={<span className="font-semibold">ยอดสุทธิ</span>}
@@ -559,11 +692,7 @@ export default function NewOrderForm({
 
       {graphicUsers.length > 0 && (
         <Field label="กราฟฟิกผู้รับผิดชอบ">
-          <select
-            name="assignedGraphicId"
-            defaultValue=""
-            className="input"
-          >
+          <select name="assignedGraphicId" defaultValue="" className="input">
             <option value="">— ยังไม่มอบหมาย —</option>
             {graphicUsers.map((u) => (
               <option key={u.id} value={u.id}>

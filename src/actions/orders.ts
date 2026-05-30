@@ -27,10 +27,15 @@ const OrderCreateSchema = z.object({
     .optional()
     .transform((v) => (v ? v : undefined)),
   customerAddress: z.string().optional().transform((s) => s?.trim() || undefined),
-  garmentType: z.string().min(1, "เลือกประเภทเสื้อ"),
+  // Legacy single-item fields — still accepted if the form sends them
+  // (e.g. older clients or programmatic POSTs). For the new multi-item
+  // flow the form posts parallel itemGarmentType/itemCollar/itemQty/
+  // itemUnitPrice/itemSizeBreakdownJson arrays instead, and these
+  // fields are optional/ignored.
+  garmentType: z.string().optional(),
   collar: z.string().optional(),
-  qty: z.coerce.number().int().min(5, "ขั้นต่ำ 5 ตัว"),
-  unitPrice: z.coerce.number().min(0).default(0),
+  qty: z.coerce.number().int().min(0).optional(),
+  unitPrice: z.coerce.number().min(0).optional(),
   discount: z.coerce.number().min(0).default(0),
   shipping: z.coerce.number().min(0).default(0),
   vatRate: z.coerce.number().min(0).max(1).default(0),
@@ -83,8 +88,66 @@ export async function createOrder(
     return { errors: z.flattenError(parsed.error).fieldErrors };
   }
 
-  const { customerName, garmentType, collar, qty, unitPrice, deadline, notes } =
-    parsed.data;
+  const { customerName, deadline, notes } = parsed.data;
+
+  // Multi-item parse — the form sends parallel hidden inputs per row.
+  // Fall back to legacy single-item fields if the form didn't include
+  // any itemGarmentType (e.g. an older client).
+  type ItemPayload = {
+    garmentType: string;
+    collar: string | null;
+    qty: number;
+    unitPrice: number;
+    sizeBreakdownJson: string;
+  };
+
+  const itemGarmentTypes = formData.getAll("itemGarmentType").map(String);
+  const itemCollars = formData.getAll("itemCollar").map(String);
+  const itemQtys = formData.getAll("itemQty").map(String);
+  const itemUnitPrices = formData.getAll("itemUnitPrice").map(String);
+  const itemSbJsons = formData.getAll("itemSizeBreakdownJson").map(String);
+
+  const items: ItemPayload[] = [];
+  if (itemGarmentTypes.length > 0) {
+    const n = Math.max(
+      itemGarmentTypes.length,
+      itemQtys.length,
+      itemUnitPrices.length
+    );
+    for (let i = 0; i < n; i++) {
+      const gt = (itemGarmentTypes[i] ?? "").trim();
+      const q = parseInt(itemQtys[i] ?? "0", 10) || 0;
+      if (!gt || q <= 0) continue; // skip empty/incomplete rows
+      items.push({
+        garmentType: gt,
+        collar: (itemCollars[i] ?? "").trim() || null,
+        qty: q,
+        unitPrice: parseFloat(itemUnitPrices[i] ?? "0") || 0,
+        sizeBreakdownJson: itemSbJsons[i] ?? "",
+      });
+    }
+  } else if (parsed.data.garmentType && parsed.data.qty) {
+    // Legacy single-item path
+    items.push({
+      garmentType: parsed.data.garmentType,
+      collar: parsed.data.collar?.trim() || null,
+      qty: parsed.data.qty,
+      unitPrice: parsed.data.unitPrice ?? 0,
+      sizeBreakdownJson: parsed.data.sizeBreakdownJson ?? "",
+    });
+  }
+
+  if (items.length === 0) {
+    return { errors: { items: ["กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ"] } };
+  }
+
+  // Enforce per-order minimum qty (sum of items) — keeps the existing
+  // "ขั้นต่ำ 5 ตัว" rule but applied at the order level so a small pant
+  // line item doesn't get rejected on its own.
+  const totalQty = items.reduce((s, it) => s + it.qty, 0);
+  if (totalQty < 5) {
+    return { errors: { items: ["จำนวนรวมทุกรายการขั้นต่ำ 5 ตัว"] } };
+  }
 
   const currentUser = await getCurrentUser();
   const userId = currentUser?.id ?? null;
@@ -148,30 +211,38 @@ export async function createOrder(
     }
   }
 
-  // Pre-compute sizeBreakdown JSON for surcharge calc (also used below for items)
-  let preliminarySizeBreakdown: string | null = null;
-  if (parsed.data.sizeBreakdownJson) {
+  // Normalise each item's sizeBreakdown (strip non-positive entries) and
+  // compute the order-level subtotal + big-size surcharge by summing
+  // across all items.
+  function cleanSizeBreakdown(raw: string): string | null {
+    if (!raw) return null;
     try {
-      const obj = JSON.parse(parsed.data.sizeBreakdownJson) as Record<
-        string,
-        number
-      >;
+      const obj = JSON.parse(raw) as Record<string, number>;
       const cleaned: Record<string, number> = {};
       for (const [k, v] of Object.entries(obj)) {
         const n = Math.max(0, Math.floor(Number(v) || 0));
         if (n > 0) cleaned[k] = n;
       }
-      if (Object.keys(cleaned).length > 0) {
-        preliminarySizeBreakdown = JSON.stringify(cleaned);
-      }
+      return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
     } catch {
-      // ignore
+      return null;
     }
   }
 
-  const subtotal = qty * unitPrice;
-  const sizeSurcharge =
-    bigSizeQtyFromBreakdown(preliminarySizeBreakdown) * BIG_SIZE_SURCHARGE;
+  const cleanedItems = items.map((it) => ({
+    ...it,
+    sizeBreakdown: cleanSizeBreakdown(it.sizeBreakdownJson),
+  }));
+
+  const subtotal = cleanedItems.reduce(
+    (s, it) => s + it.qty * it.unitPrice,
+    0
+  );
+  const sizeSurcharge = cleanedItems.reduce(
+    (s, it) =>
+      s + bigSizeQtyFromBreakdown(it.sizeBreakdown) * BIG_SIZE_SURCHARGE,
+    0
+  );
 
   const totals = computeOrderTotals({
     subtotal,
@@ -212,16 +283,16 @@ export async function createOrder(
     })
     .returning();
 
-  const sizeBreakdown = preliminarySizeBreakdown;
-
-  await db.insert(schema.orderItems).values({
-    orderId: order.id,
-    garmentType,
-    collar: collar?.trim() || null,
-    qty,
-    unitPrice,
-    sizeBreakdown,
-  });
+  await db.insert(schema.orderItems).values(
+    cleanedItems.map((it) => ({
+      orderId: order.id,
+      garmentType: it.garmentType,
+      collar: it.collar,
+      qty: it.qty,
+      unitPrice: it.unitPrice,
+      sizeBreakdown: it.sizeBreakdown,
+    }))
+  );
 
   // Auto-create production stages so the graphic team sees the new order
   // immediately on the production board (no need to wait for "in_production")
@@ -270,7 +341,8 @@ export async function createOrder(
     details: {
       code,
       customerId,
-      qty,
+      qty: totalQty,
+      itemCount: cleanedItems.length,
       dealerId,
       attachments: urls.length,
     },
