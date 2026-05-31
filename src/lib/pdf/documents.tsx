@@ -448,8 +448,7 @@ const qStyles = StyleSheet.create({
   qInWords: {
     marginTop: 8,
     fontSize: 9,
-    color: "#000",
-    fontStyle: "italic",
+    color: "#3f3f46",
   },
   // Notes
   qNotes: { marginTop: 16 },
@@ -762,7 +761,6 @@ export function QuotationPDF({
                   flex: 1,
                   textAlign: "center",
                   color: "#a1a1aa",
-                  fontStyle: "italic",
                 }}
               >
                 ยังไม่มีรายการ
