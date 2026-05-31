@@ -26,6 +26,17 @@ export async function renderQuotationPDF(orderId: number): Promise<Buffer> {
     .from(schema.orderItems)
     .where(eq(schema.orderItems.orderId, orderId));
 
+  // Sales person — the user who created the order (used as "ผู้ขาย"
+  // in the quotation header). Falls back to email if no name set.
+  let salesName: string | null = null;
+  if (order.createdBy) {
+    const [creator] = await db
+      .select({ name: schema.users.name, email: schema.users.email })
+      .from(schema.users)
+      .where(eq(schema.users.id, order.createdBy));
+    if (creator) salesName = creator.name || creator.email;
+  }
+
   return renderToBuffer(
     QuotationPDF({
       order: {
@@ -43,6 +54,7 @@ export async function renderQuotationPDF(orderId: number): Promise<Buffer> {
         dealerDiscount: order.dealerDiscount,
         sizeSurcharge: order.sizeSurcharge,
         requiresDeposit: order.requiresDeposit,
+        salesName,
       },
       customer: {
         name: customer.name,

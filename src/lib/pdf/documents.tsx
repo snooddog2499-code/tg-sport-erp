@@ -26,10 +26,14 @@ Font.register({
 });
 
 export const COMPANY = {
-  name: "TG Sport",
+  name: "บริษัท ทีจี สปอร์ต ดีไซน์ จำกัด",
+  nameEn: "TG SPORT DESIGN",
+  branch: "สำนักงานใหญ่",
   tagline: "รับผลิตเสื้อกีฬา · เสื้อทีม · เสื้อพิมพ์ลาย Sublimation",
-  address: "จังหวัดกาฬสินธุ์",
-  phone: "—",
+  address:
+    "247 หมู่ที่ 11 ตำบลกมลาไสย อำเภอกมลาไสย จังหวัดกาฬสินธุ์ 46130",
+  taxId: "0465568000618",
+  phone: "080-210-2228",
   fbPage: "facebook.com/TGSportsDesign",
 };
 
@@ -64,6 +68,9 @@ type OrderInfo = {
   dealerDiscount?: number;
   sizeSurcharge?: number;
   requiresDeposit?: boolean;
+  // Optional metadata for quotation header
+  salesName?: string | null; // ผู้ขาย (creator's name/email)
+  projectName?: string | null; // ชื่องาน (defaults to first line of notes)
 };
 
 function formatBaht(n: number): string {
@@ -82,6 +89,73 @@ function formatDateTH(s: string | null | undefined): string {
     month: "short",
     year: "numeric",
   });
+}
+
+// Convert a baht amount to Thai text — used for "(หกพันหนึ่งร้อยสิบห้าบาทถ้วน)"
+function bahtToThaiText(num: number): string {
+  const DIGITS = [
+    "",
+    "หนึ่ง",
+    "สอง",
+    "สาม",
+    "สี่",
+    "ห้า",
+    "หก",
+    "เจ็ด",
+    "แปด",
+    "เก้า",
+  ];
+  const POS = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
+
+  function under1m(n: number): string {
+    if (n === 0) return "";
+    const digits = String(n).split("").map(Number);
+    let s = "";
+    const len = digits.length;
+    for (let i = 0; i < len; i++) {
+      const d = digits[i];
+      const pos = len - 1 - i; // positional power (0=ones, 1=tens, ...)
+      if (d === 0) continue;
+      if (pos === 1) {
+        if (d === 1) {
+          s += "สิบ";
+        } else if (d === 2) {
+          s += "ยี่สิบ";
+        } else {
+          s += DIGITS[d] + "สิบ";
+        }
+      } else if (pos === 0) {
+        // ones place: เอ็ด instead of หนึ่ง when there are higher digits
+        if (d === 1 && len > 1) s += "เอ็ด";
+        else s += DIGITS[d];
+      } else {
+        s += DIGITS[d] + POS[pos];
+      }
+    }
+    return s;
+  }
+
+  function fullNumber(n: number): string {
+    if (n === 0) return "ศูนย์";
+    if (n < 1_000_000) return under1m(n);
+    const million = Math.floor(n / 1_000_000);
+    const rest = n % 1_000_000;
+    return fullNumber(million) + "ล้าน" + (rest > 0 ? under1m(rest) : "");
+  }
+
+  // Round to 2 decimals, split baht + satang
+  const rounded = Math.round(num * 100) / 100;
+  const baht = Math.floor(rounded);
+  const satang = Math.round((rounded - baht) * 100);
+
+  const bahtText = fullNumber(baht);
+  let s = bahtText + "บาท";
+  if (satang > 0) {
+    s += under1m(satang) + "สตางค์";
+  } else {
+    s += "ถ้วน";
+  }
+  return s;
 }
 
 function formatSizeBreakdown(s: string | null): string {
@@ -236,6 +310,197 @@ const styles = StyleSheet.create({
   },
 });
 
+// ─────────────── Quotation-specific styles (matches printed reference) ───
+const qStyles = StyleSheet.create({
+  page: {
+    padding: 36,
+    fontFamily: "Sarabun",
+    fontSize: 10,
+    color: "#000",
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  // Left: logo + company info
+  leftBlock: { width: "55%" },
+  logoBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  logoMark: {
+    width: 56,
+    height: 56,
+    borderWidth: 2,
+    borderColor: "#000",
+    backgroundColor: "#000",
+    color: "#fff",
+    textAlign: "center",
+    paddingTop: 14,
+    fontSize: 22,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
+  logoText: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: "#000",
+    letterSpacing: 1.5,
+  },
+  companyName: { fontSize: 10, color: "#000", marginTop: 4 },
+  companyLine: {
+    fontSize: 9,
+    color: "#3f3f46",
+    marginTop: 1,
+    lineHeight: 1.4,
+  },
+  // Right: doc title + meta
+  rightBlock: { width: "42%", alignItems: "flex-end" },
+  qDocTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 14,
+  },
+  metaGrid: { width: "100%" },
+  metaRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: 3,
+  },
+  metaLabel: {
+    width: 60,
+    fontSize: 9,
+    color: "#52525b",
+    textAlign: "right",
+    marginRight: 8,
+  },
+  metaValue: {
+    fontSize: 9,
+    color: "#000",
+    minWidth: 140,
+    textAlign: "left",
+  },
+  // Customer
+  custRow: { marginTop: 8, marginBottom: 12 },
+  custLabel: { fontSize: 9, color: "#52525b" },
+  custName: { fontSize: 11, color: "#000", marginTop: 1 },
+  // Items table
+  qTable: {
+    borderWidth: 1,
+    borderColor: "#000",
+    marginTop: 4,
+  },
+  qHead: {
+    flexDirection: "row",
+    backgroundColor: "#fafafa",
+    borderBottomWidth: 1,
+    borderBottomColor: "#000",
+    paddingVertical: 6,
+    fontSize: 9,
+    fontWeight: "bold",
+  },
+  qHeadCell: {
+    textAlign: "center",
+    paddingHorizontal: 4,
+  },
+  qRow: {
+    flexDirection: "row",
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#a1a1aa",
+    paddingVertical: 5,
+    fontSize: 9,
+  },
+  qCellNo: { width: 40, textAlign: "center" },
+  qCellDesc: { flex: 1, paddingHorizontal: 6 },
+  qCellQty: { width: 70, paddingHorizontal: 4 },
+  qCellPrice: { width: 80, textAlign: "right", paddingHorizontal: 6 },
+  qCellTotal: { width: 80, textAlign: "right", paddingHorizontal: 6 },
+  // Summary
+  qSummary: {
+    marginTop: 10,
+    alignSelf: "flex-end",
+    width: 280,
+  },
+  qSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+    fontSize: 10,
+  },
+  qSummaryLabel: { color: "#3f3f46" },
+  qSummaryValue: { fontWeight: "bold", color: "#000" },
+  qSummaryGrand: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+    fontSize: 11,
+    fontWeight: "bold",
+    borderTopWidth: 1,
+    borderTopColor: "#000",
+    marginTop: 2,
+  },
+  // In words
+  qInWords: {
+    marginTop: 8,
+    fontSize: 9,
+    color: "#000",
+    fontStyle: "italic",
+  },
+  // Notes
+  qNotes: { marginTop: 16 },
+  qNotesHeader: { fontSize: 9, fontWeight: "bold", marginBottom: 4 },
+  qNoteLine: {
+    fontSize: 9,
+    color: "#3f3f46",
+    lineHeight: 1.5,
+  },
+  // Footer: name lines + signature blocks
+  qFooter: { marginTop: 32 },
+  qNameRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  qNameItem: { width: "45%" },
+  qNameLabel: { fontSize: 9, color: "#3f3f46" },
+  qNameValue: { fontSize: 10, color: "#000", marginTop: 1 },
+  qLogoCenter: {
+    alignSelf: "center",
+    marginVertical: 12,
+    fontSize: 16,
+    fontWeight: "bold",
+    letterSpacing: 2,
+    color: "#000",
+  },
+  qSignRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+  },
+  qSignCell: {
+    width: "45%",
+    alignItems: "center",
+  },
+  qSignLine: {
+    width: "100%",
+    borderTopWidth: 0.5,
+    borderTopColor: "#000",
+    marginBottom: 4,
+  },
+  qSignLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    fontSize: 9,
+    color: "#3f3f46",
+  },
+});
+
 function CompanyHeader({
   docTitle,
   docTitleEn,
@@ -367,6 +632,25 @@ function Signatures() {
   );
 }
 
+// Build a one-line item description that incorporates collar style,
+// size breakdown, and any per-item note. Mirrors the printed sample
+// (e.g. "เสื้อคอปกคางหมู แขนสั้น ไซส์ L + กางเกง ไซส์ L ผ้าเม็ดข้าวสาร เบอร์ 2").
+function describeItem(it: OrderItem): string {
+  const parts: string[] = [];
+  // Garment + collar
+  if (it.collar) {
+    parts.push(`${it.garmentType} ${it.collar}`.trim());
+  } else {
+    parts.push(it.garmentType);
+  }
+  // Size summary (one-line)
+  const sb = formatSizeBreakdown(it.sizeBreakdown);
+  if (sb) parts.push(`ไซส์ ${sb}`);
+  // Note (color/pattern/jersey number)
+  if (it.note) parts.push(it.note);
+  return parts.join(" · ");
+}
+
 export function QuotationPDF({
   order,
   customer,
@@ -380,99 +664,228 @@ export function QuotationPDF({
     (s, it) => s + it.qty * (it.unitPrice ?? 0),
     0
   );
+  const surcharges =
+    (order.sizeSurcharge ?? 0) - (order.dealerDiscount ?? 0) -
+    (order.discount ?? 0) +
+    (order.shipping ?? 0);
+  const beforeVat = subtotal + surcharges;
+  const vatAmount = order.vatAmount ?? 0;
+  const grandTotal = order.total || beforeVat + vatAmount;
+
+  const vatPct = ((order.vatRate ?? 0) * 100).toFixed(0);
+
+  // ชื่องาน: first line of notes if present, else dash
+  const projectName =
+    order.projectName ??
+    (order.notes ? order.notes.split("\n")[0].slice(0, 80) : null);
+  // Notes (excluding the first line if it was used as project name)
+  const noteBody = order.notes
+    ? order.projectName
+      ? order.notes
+      : order.notes.split("\n").slice(1).join("\n").trim()
+    : "";
+
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <CompanyHeader
-          docTitle="ใบเสนอราคา"
-          docTitleEn="QUOTATION"
-          docNumber={order.code}
-          docDate={formatDateTH(order.createdAt)}
-        />
-        <CustomerBlock customer={customer} order={order} />
-        <ItemsTable items={items} />
+      <Page size="A4" style={qStyles.page}>
+        {/* Top: logo + company info on left, doc title + meta on right */}
+        <View style={qStyles.topRow}>
+          <View style={qStyles.leftBlock}>
+            <View style={qStyles.logoBox}>
+              <Text style={qStyles.logoMark}>TG</Text>
+              <Text style={qStyles.logoText}>{COMPANY.nameEn}</Text>
+            </View>
+            <Text style={qStyles.companyName}>
+              {COMPANY.name} ({COMPANY.branch})
+            </Text>
+            <Text style={qStyles.companyLine}>ที่อยู่ {COMPANY.address}</Text>
+            <Text style={qStyles.companyLine}>
+              เลขประจำตัวผู้เสียภาษี {COMPANY.taxId}
+            </Text>
+            <Text style={qStyles.companyLine}>โทร. {COMPANY.phone}</Text>
+          </View>
+          <View style={qStyles.rightBlock}>
+            <Text style={qStyles.qDocTitle}>ใบเสนอราคา</Text>
+            <View style={qStyles.metaGrid}>
+              <View style={qStyles.metaRow}>
+                <Text style={qStyles.metaLabel}>เลขที่</Text>
+                <Text style={qStyles.metaValue}>{order.code}</Text>
+              </View>
+              <View style={qStyles.metaRow}>
+                <Text style={qStyles.metaLabel}>วันที่</Text>
+                <Text style={qStyles.metaValue}>
+                  {formatDateTH(order.createdAt)}
+                </Text>
+              </View>
+              {order.salesName && (
+                <View style={qStyles.metaRow}>
+                  <Text style={qStyles.metaLabel}>ผู้ขาย</Text>
+                  <Text style={qStyles.metaValue}>{order.salesName}</Text>
+                </View>
+              )}
+              {projectName && (
+                <View style={qStyles.metaRow}>
+                  <Text style={qStyles.metaLabel}>ชื่องาน</Text>
+                  <Text style={qStyles.metaValue}>{projectName}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
 
-        <View style={styles.totalBlock}>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>ยอดสินค้า</Text>
-            <Text style={styles.totalValue}>{formatBaht(subtotal)}</Text>
+        {/* Customer */}
+        <View style={qStyles.custRow}>
+          <Text style={qStyles.custLabel}>ลูกค้า</Text>
+          <Text style={qStyles.custName}>{customer.name}</Text>
+          {customer.address && (
+            <Text style={qStyles.companyLine}>{customer.address}</Text>
+          )}
+        </View>
+
+        {/* Items */}
+        <View style={qStyles.qTable}>
+          <View style={qStyles.qHead}>
+            <Text style={[qStyles.qCellNo, qStyles.qHeadCell]}>ลำดับ</Text>
+            <Text style={[qStyles.qCellDesc, qStyles.qHeadCell]}>
+              รายละเอียด
+            </Text>
+            <Text style={[qStyles.qCellQty, qStyles.qHeadCell]}>จำนวน</Text>
+            <Text style={[qStyles.qCellPrice, qStyles.qHeadCell]}>
+              ราคาต่อหน่วย
+            </Text>
+            <Text style={[qStyles.qCellTotal, qStyles.qHeadCell]}>ยอดรวม</Text>
+          </View>
+          {items.length === 0 && (
+            <View style={qStyles.qRow}>
+              <Text
+                style={{
+                  flex: 1,
+                  textAlign: "center",
+                  color: "#a1a1aa",
+                  fontStyle: "italic",
+                }}
+              >
+                ยังไม่มีรายการ
+              </Text>
+            </View>
+          )}
+          {items.map((it, i) => {
+            const lineTotal = it.qty * (it.unitPrice ?? 0);
+            return (
+              <View style={qStyles.qRow} key={i}>
+                <Text style={qStyles.qCellNo}>{i + 1}</Text>
+                <Text style={qStyles.qCellDesc}>{describeItem(it)}</Text>
+                <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
+                <Text style={qStyles.qCellPrice}>
+                  {formatBaht(it.unitPrice ?? 0)}
+                </Text>
+                <Text style={qStyles.qCellTotal}>{formatBaht(lineTotal)}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Summary */}
+        <View style={qStyles.qSummary}>
+          <View style={qStyles.qSummaryRow}>
+            <Text style={qStyles.qSummaryLabel}>รวมเป็นเงิน</Text>
+            <Text style={qStyles.qSummaryValue}>
+              {formatBaht(subtotal)} บาท
+            </Text>
           </View>
           {(order.sizeSurcharge ?? 0) > 0 && (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>เพิ่มไซส์ใหญ่ (3XL+)</Text>
-              <Text style={styles.totalValue}>
-                + {formatBaht(order.sizeSurcharge ?? 0)}
+            <View style={qStyles.qSummaryRow}>
+              <Text style={qStyles.qSummaryLabel}>
+                เพิ่มไซส์ใหญ่ (3XL+)
+              </Text>
+              <Text style={qStyles.qSummaryValue}>
+                + {formatBaht(order.sizeSurcharge ?? 0)} บาท
               </Text>
             </View>
           )}
           {(order.dealerDiscount ?? 0) > 0 && (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>ส่วนลดตัวแทน</Text>
-              <Text style={styles.totalValue}>
-                − {formatBaht(order.dealerDiscount ?? 0)}
+            <View style={qStyles.qSummaryRow}>
+              <Text style={qStyles.qSummaryLabel}>ส่วนลดตัวแทน</Text>
+              <Text style={qStyles.qSummaryValue}>
+                − {formatBaht(order.dealerDiscount ?? 0)} บาท
               </Text>
             </View>
           )}
           {(order.discount ?? 0) > 0 && (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>ส่วนลด</Text>
-              <Text style={styles.totalValue}>
-                − {formatBaht(order.discount ?? 0)}
+            <View style={qStyles.qSummaryRow}>
+              <Text style={qStyles.qSummaryLabel}>ส่วนลด</Text>
+              <Text style={qStyles.qSummaryValue}>
+                − {formatBaht(order.discount ?? 0)} บาท
               </Text>
             </View>
           )}
           {(order.shipping ?? 0) > 0 && (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>ค่าขนส่ง</Text>
-              <Text style={styles.totalValue}>
-                + {formatBaht(order.shipping ?? 0)}
+            <View style={qStyles.qSummaryRow}>
+              <Text style={qStyles.qSummaryLabel}>ค่าขนส่ง</Text>
+              <Text style={qStyles.qSummaryValue}>
+                + {formatBaht(order.shipping ?? 0)} บาท
               </Text>
             </View>
           )}
-          {(order.vatAmount ?? 0) > 0 && (
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>
-                VAT {((order.vatRate ?? 0) * 100).toFixed(0)}%
-              </Text>
-              <Text style={styles.totalValue}>
-                + {formatBaht(order.vatAmount ?? 0)}
-              </Text>
-            </View>
-          )}
-          <View style={[styles.totalRow, styles.grandTotal]}>
-            <Text style={{ color: "#18181b" }}>ยอดสุทธิ</Text>
-            <Text
-              style={{
-                minWidth: 90,
-                textAlign: "right",
-                color: "#ef4c23",
-              }}
-            >
-              {formatBaht(order.total || subtotal)} บาท
+          <View style={qStyles.qSummaryRow}>
+            <Text style={qStyles.qSummaryLabel}>
+              ภาษีมูลค่าเพิ่ม {vatPct}%
             </Text>
+            <Text style={qStyles.qSummaryValue}>
+              {formatBaht(vatAmount)} บาท
+            </Text>
+          </View>
+          <View style={qStyles.qSummaryGrand}>
+            <Text>จำนวนเงินรวมทั้งสิ้น</Text>
+            <Text>{formatBaht(grandTotal)} บาท</Text>
           </View>
         </View>
 
-        {order.notes && (
-          <View style={styles.notes}>
-            <Text>หมายเหตุ: {order.notes}</Text>
+        {/* Amount in words */}
+        <Text style={qStyles.qInWords}>({bahtToThaiText(grandTotal)})</Text>
+
+        {/* Notes */}
+        {noteBody && (
+          <View style={qStyles.qNotes}>
+            <Text style={qStyles.qNotesHeader}>หมายเหตุ</Text>
+            {noteBody.split("\n").map((line, i) => (
+              <Text key={i} style={qStyles.qNoteLine}>
+                {line}
+              </Text>
+            ))}
           </View>
         )}
 
-        <View style={styles.terms}>
-          <Text>เงื่อนไข:</Text>
-          <Text>· ราคานี้ยืนยันภายใน 15 วัน นับจากวันที่ออกใบเสนอราคา</Text>
-          <Text>
-            ·{" "}
-            {order.requiresDeposit !== false
-              ? "มัดจำ 50% ก่อนเริ่มผลิต ส่วนที่เหลือชำระเมื่อรับของ"
-              : "ชำระเต็มจำนวนเมื่อรับสินค้า (ไม่ต้องมัดจำ)"}
-          </Text>
-          <Text>· ระยะเวลาผลิต 7-15 วันทำการ ขึ้นอยู่กับจำนวนและความซับซ้อนของลาย</Text>
-          <Text>· ลูกค้าต้องตรวจและอนุมัติลายก่อนเริ่มผลิตจริง</Text>
+        {/* Footer */}
+        <View style={qStyles.qFooter}>
+          <View style={qStyles.qNameRow}>
+            <View style={qStyles.qNameItem}>
+              <Text style={qStyles.qNameLabel}>ในนาม</Text>
+              <Text style={qStyles.qNameValue}>{customer.name}</Text>
+            </View>
+            <View style={[qStyles.qNameItem, { alignItems: "flex-end" }]}>
+              <Text style={qStyles.qNameLabel}>ในนาม</Text>
+              <Text style={qStyles.qNameValue}>{COMPANY.name}</Text>
+            </View>
+          </View>
+          <Text style={qStyles.qLogoCenter}>{COMPANY.nameEn}</Text>
+          <View style={qStyles.qSignRow}>
+            <View style={qStyles.qSignCell}>
+              <View style={qStyles.qSignLine} />
+              <View style={qStyles.qSignLabelRow}>
+                <Text>ผู้สั่งซื้อสินค้า</Text>
+                <Text>วันที่</Text>
+              </View>
+            </View>
+            <View style={qStyles.qSignCell}>
+              <View style={qStyles.qSignLine} />
+              <View style={qStyles.qSignLabelRow}>
+                <Text>ผู้อนุมัติ</Text>
+                <Text>วันที่</Text>
+              </View>
+            </View>
+          </View>
         </View>
-
-        <Signatures />
       </Page>
     </Document>
   );
