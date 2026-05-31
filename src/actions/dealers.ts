@@ -8,6 +8,7 @@ import { z } from "zod";
 import { logAction } from "@/lib/audit";
 import { getCurrentUserId } from "@/lib/session";
 import { requirePerm } from "@/lib/permissions";
+import { PARTNER_STANDARD_RATES } from "@/lib/partner-rates";
 
 const DealerSchema = z.object({
   name: z.string().min(1, "กรุณากรอกชื่อ"),
@@ -18,6 +19,13 @@ const DealerSchema = z.object({
   commissionPct: z.coerce.number().min(0).max(100).default(0),
   discountPct: z.coerce.number().min(0).max(100).default(0),
   note: z.string().optional(),
+  // Checkbox on /dealers/new — when "on", seed the standard 12-row
+  // Partner price chart into dealer_prices right after creating the
+  // dealer header.
+  seedPartnerRates: z
+    .union([z.literal("on"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on"),
 });
 
 export type DealerFormState = {
@@ -50,12 +58,27 @@ export async function createDealer(
     })
     .returning();
 
+  // Optionally seed the standard Partner price chart (6-month+ rates)
+  if (parsed.data.seedPartnerRates) {
+    await db.insert(schema.dealerPrices).values(
+      PARTNER_STANDARD_RATES.map((r) => ({
+        dealerId: inserted.id,
+        garmentType: r.garmentType,
+        minQty: r.minQty,
+        price: r.price,
+      }))
+    );
+  }
+
   await logAction({
     userId,
     action: "create",
     entity: "dealer",
     entityId: inserted.id,
-    details: { name: parsed.data.name },
+    details: {
+      name: parsed.data.name,
+      seededPartnerRates: parsed.data.seedPartnerRates,
+    },
   });
 
   revalidatePath("/dealers");

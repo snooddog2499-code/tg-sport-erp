@@ -48,6 +48,12 @@ export const settings = {
   ] as const,
 
   garmentTypes: [
+    // Partner rate categories (matches the printed price chart)
+    "คอกลม / คอวี",
+    "คอปิดหน้า / คอห้าเหลี่ยม / คอวาย",
+    "คอปก / คอฟิก / คอปกวินเทจ",
+    "กางเกงพิมพ์ลาย",
+    // Generic categories
     "เสื้อกีฬา",
     "เสื้อบอล",
     "เสื้อบาส",
