@@ -417,9 +417,45 @@ const qStyles = StyleSheet.create({
   },
   qCellNo: { width: 40, textAlign: "center" },
   qCellDesc: { flex: 1, paddingHorizontal: 6 },
-  qCellQty: { width: 70, paddingHorizontal: 4 },
+  qDescTitle: {
+    fontSize: 9,
+    color: "#000",
+    fontWeight: "bold",
+  },
+  qSizeList: { marginTop: 3 },
+  qSizeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 1,
+  },
+  qSizeBullet: {
+    width: 10,
+    fontSize: 9,
+    color: "#71717a",
+  },
+  qSizeLabel: {
+    width: 70,
+    fontSize: 9,
+    color: "#3f3f46",
+  },
+  qSizeQty: {
+    fontSize: 9,
+    color: "#000",
+  },
+  qDescNote: {
+    fontSize: 8,
+    color: "#52525b",
+    marginTop: 3,
+    fontStyle: "normal",
+  },
+  qCellQty: { width: 70, paddingHorizontal: 4, fontWeight: "bold" },
   qCellPrice: { width: 80, textAlign: "right", paddingHorizontal: 6 },
-  qCellTotal: { width: 80, textAlign: "right", paddingHorizontal: 6 },
+  qCellTotal: {
+    width: 80,
+    textAlign: "right",
+    paddingHorizontal: 6,
+    fontWeight: "bold",
+  },
   // Summary
   qSummary: {
     marginTop: 10,
@@ -631,23 +667,21 @@ function Signatures() {
   );
 }
 
-// Build a one-line item description that incorporates collar style,
-// size breakdown, and any per-item note. Mirrors the printed sample
-// (e.g. "เสื้อคอปกคางหมู แขนสั้น ไซส์ L + กางเกง ไซส์ L ผ้าเม็ดข้าวสาร เบอร์ 2").
-function describeItem(it: OrderItem): string {
-  const parts: string[] = [];
-  // Garment + collar
-  if (it.collar) {
-    parts.push(`${it.garmentType} ${it.collar}`.trim());
-  } else {
-    parts.push(it.garmentType);
+// Parse the JSON sizeBreakdown into an ordered list of {size, qty}
+// entries so the quotation can render one size per line instead of
+// a single cramped string.
+function sizeBreakdownEntries(
+  raw: string | null
+): { size: string; qty: number }[] {
+  if (!raw) return [];
+  try {
+    const obj = JSON.parse(raw) as Record<string, number>;
+    return Object.entries(obj)
+      .filter(([, v]) => v > 0)
+      .map(([size, qty]) => ({ size, qty }));
+  } catch {
+    return [];
   }
-  // Size summary (one-line)
-  const sb = formatSizeBreakdown(it.sizeBreakdown);
-  if (sb) parts.push(`ไซส์ ${sb}`);
-  // Note (color/pattern/jersey number)
-  if (it.note) parts.push(it.note);
-  return parts.join(" · ");
 }
 
 export function QuotationPDF({
@@ -769,10 +803,35 @@ export function QuotationPDF({
           )}
           {items.map((it, i) => {
             const lineTotal = it.qty * (it.unitPrice ?? 0);
+            const sizes = sizeBreakdownEntries(it.sizeBreakdown);
+            const title = it.collar
+              ? `${it.garmentType} · ${it.collar}`.trim()
+              : it.garmentType;
             return (
-              <View style={qStyles.qRow} key={i}>
+              <View
+                style={[qStyles.qRow, { alignItems: "flex-start" }]}
+                key={i}
+              >
                 <Text style={qStyles.qCellNo}>{i + 1}</Text>
-                <Text style={qStyles.qCellDesc}>{describeItem(it)}</Text>
+                <View style={qStyles.qCellDesc}>
+                  <Text style={qStyles.qDescTitle}>{title}</Text>
+                  {sizes.length > 0 ? (
+                    <View style={qStyles.qSizeList}>
+                      {sizes.map((s) => (
+                        <View key={s.size} style={qStyles.qSizeRow}>
+                          <Text style={qStyles.qSizeBullet}>•</Text>
+                          <Text style={qStyles.qSizeLabel}>ไซส์ {s.size}</Text>
+                          <Text style={qStyles.qSizeQty}>
+                            {s.qty} ตัว
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                  {it.note && (
+                    <Text style={qStyles.qDescNote}>หมายเหตุ: {it.note}</Text>
+                  )}
+                </View>
                 <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
                 <Text style={qStyles.qCellPrice}>
                   {formatBaht(it.unitPrice ?? 0)}
