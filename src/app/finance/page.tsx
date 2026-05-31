@@ -25,10 +25,7 @@ export default async function FinancePage() {
             รายรับ-รายจ่าย
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
-            เพิ่มรายการรายรับ/รายจ่าย — ภาพรวมและสรุปยอดดูได้ที่{" "}
-            <Link href="/" className="text-brand-600 hover:underline">
-              แดชบอร์ด
-            </Link>
+            เพิ่มรายการรายรับ/รายจ่าย
           </p>
         </div>
         {canManage && (

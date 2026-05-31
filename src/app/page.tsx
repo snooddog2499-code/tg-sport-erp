@@ -2,6 +2,7 @@ import { db, schema } from "@/db";
 import { and, eq, gte, lte, lt, sql, desc } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { filterMenuItemsForUser } from "@/lib/menu-access";
 import Link from "next/link";
 import { formatBaht, formatDateTH, stageLabels } from "@/lib/format";
 import type { ProductionStage } from "@/db/schema";
@@ -210,7 +211,20 @@ export default async function Home({
   }>;
 }) {
   const user = await getCurrentUser();
-  if (user?.role === "dealer") redirect("/dealer-portal");
+  if (!user) redirect("/login");
+  if (user.role === "dealer") redirect("/dealer-portal");
+
+  // Server-side gate: a role that doesn't see แดชบอร์ด in the sidebar
+  // shouldn't be able to reach this page by typing the URL either.
+  // Owner is always allowed; everyone else passes through the same
+  // role/override filter the sidebar uses, so explicit per-user grants
+  // via /settings/permissions still work.
+  if (user.role !== "owner") {
+    const visible = await filterMenuItemsForUser(user);
+    if (!visible.some((m) => m.key === "home")) {
+      redirect("/orders");
+    }
+  }
 
   const sp = await searchParams;
   const range = parseRange(sp?.range);
