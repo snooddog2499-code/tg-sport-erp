@@ -406,7 +406,7 @@ const qStyles = StyleSheet.create({
   },
   qHeadCell: {
     textAlign: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   qRow: {
     flexDirection: "row",
@@ -415,7 +415,7 @@ const qStyles = StyleSheet.create({
     paddingVertical: 5,
     fontSize: 9,
   },
-  qCellNo: { width: 40, textAlign: "center" },
+  qCellNo: { width: 50, textAlign: "center", paddingHorizontal: 2 },
   qCellDesc: { flex: 1, paddingHorizontal: 6 },
   qDescTitle: {
     fontSize: 9,
@@ -428,12 +428,12 @@ const qStyles = StyleSheet.create({
     marginTop: 3,
     fontStyle: "normal",
   },
-  qCellQty: { width: 70, paddingHorizontal: 4, fontWeight: "bold" },
-  qCellPrice: { width: 80, textAlign: "right", paddingHorizontal: 6 },
+  qCellQty: { width: 70, paddingHorizontal: 6, fontWeight: "bold" },
+  qCellPrice: { width: 90, textAlign: "right", paddingHorizontal: 8 },
   qCellTotal: {
-    width: 80,
+    width: 90,
     textAlign: "right",
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     fontWeight: "bold",
   },
   // Per-size sub-rows: same column widths as the main row, indented
@@ -452,21 +452,21 @@ const qStyles = StyleSheet.create({
   },
   qCellQtySub: {
     width: 70,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
     fontSize: 9,
     color: "#000",
   },
   qCellPriceSub: {
-    width: 80,
+    width: 90,
     textAlign: "right",
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     fontSize: 9,
     color: "#3f3f46",
   },
   qCellTotalSub: {
-    width: 80,
+    width: 90,
     textAlign: "right",
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     fontSize: 9,
     color: "#000",
   },
