@@ -698,6 +698,27 @@ function sizeBreakdownEntries(
   }
 }
 
+// Per the printed price chart, 3XL+ sizes carry a flat surcharge.
+// We fold this into the displayed unit price on the quotation so
+// customers don't have to mentally add a per-row adjustment.
+const BIG_SIZES = new Set([
+  "3XL",
+  "4XL",
+  "5XL",
+  "6XL",
+  "7XL",
+  "8XL",
+  "9XL",
+  "10XL",
+]);
+const BIG_SIZE_SURCHARGE_PER_UNIT = 30;
+
+function effectiveUnitPrice(baseUnitPrice: number, size: string): number {
+  return BIG_SIZES.has(size)
+    ? baseUnitPrice + BIG_SIZE_SURCHARGE_PER_UNIT
+    : baseUnitPrice;
+}
+
 export function QuotationPDF({
   order,
   customer,
@@ -707,17 +728,25 @@ export function QuotationPDF({
   customer: CustomerInfo;
   items: OrderItem[];
 }) {
-  const subtotal = items.reduce(
+  // Base subtotal = sum(qty * unitPrice) without any surcharge.
+  const baseSubtotal = items.reduce(
     (s, it) => s + it.qty * (it.unitPrice ?? 0),
     0
   );
-  const surcharges =
-    (order.sizeSurcharge ?? 0) - (order.dealerDiscount ?? 0) -
-    (order.discount ?? 0) +
-    (order.shipping ?? 0);
-  const beforeVat = subtotal + surcharges;
+  // Displayed subtotal absorbs the per-item size surcharge so it
+  // matches the per-row totals the customer sees in the table (e.g.
+  // 3XL rows show 210 / ตัว when base is 180). The grand total stays
+  // identical to order.total — we're just rearranging where the
+  // surcharge appears.
+  const displayedSubtotal = baseSubtotal + (order.sizeSurcharge ?? 0);
   const vatAmount = order.vatAmount ?? 0;
-  const grandTotal = order.total || beforeVat + vatAmount;
+  const grandTotal =
+    order.total ||
+    displayedSubtotal -
+      (order.dealerDiscount ?? 0) -
+      (order.discount ?? 0) +
+      (order.shipping ?? 0) +
+      vatAmount;
 
   const vatPct = ((order.vatRate ?? 0) * 100).toFixed(0);
 
@@ -816,8 +845,7 @@ export function QuotationPDF({
             </View>
           )}
           {items.map((it, i) => {
-            const unitPrice = it.unitPrice ?? 0;
-            const lineTotal = it.qty * unitPrice;
+            const baseUnitPrice = it.unitPrice ?? 0;
             const sizes = sizeBreakdownEntries(it.sizeBreakdown);
             const title = it.collar
               ? `${it.garmentType} · ${it.collar}`.trim()
@@ -826,7 +854,10 @@ export function QuotationPDF({
 
             // No size breakdown — render the whole item as one row so
             // จำนวน / ราคาต่อหน่วย / ยอดรวม still line up under the headers.
+            // (No big-size surcharge applies because we don't know per-
+            // size quantities for this item.)
             if (!hasSizes) {
+              const lineTotal = it.qty * baseUnitPrice;
               return (
                 <View key={i} style={qStyles.qRow}>
                   <Text style={qStyles.qCellNo}>{i + 1}</Text>
@@ -840,7 +871,7 @@ export function QuotationPDF({
                   </View>
                   <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
                   <Text style={qStyles.qCellPrice}>
-                    {formatBaht(unitPrice)}
+                    {formatBaht(baseUnitPrice)}
                   </Text>
                   <Text style={qStyles.qCellTotal}>
                     {formatBaht(lineTotal)}
@@ -849,10 +880,21 @@ export function QuotationPDF({
               );
             }
 
-            // Has size breakdown — title row holds only the title and
-            // a per-item subtotal at the right; each size below gets its
-            // own row with qty + price + total clearly columned so the
-            // operator can verify any line at a glance.
+            // Has size breakdown — each row shows the *effective* unit
+            // price (base + 30 for 3XL+) so the customer doesn't have
+            // to apply the surcharge mentally. Item subtotal sums the
+            // adjusted size totals; matches displayedSubtotal in the
+            // summary.
+            const sizeRows = sizes.map((s) => {
+              const adjUnitPrice = effectiveUnitPrice(baseUnitPrice, s.size);
+              const sizeTotal = s.qty * adjUnitPrice;
+              return { ...s, adjUnitPrice, sizeTotal };
+            });
+            const itemDisplayedTotal = sizeRows.reduce(
+              (sum, r) => sum + r.sizeTotal,
+              0
+            );
+
             return (
               <React.Fragment key={i}>
                 {/* Title row — title on the left, full subtotal on the right */}
@@ -869,53 +911,48 @@ export function QuotationPDF({
                   <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
                   <Text style={qStyles.qCellPrice}></Text>
                   <Text style={qStyles.qCellTotal}>
-                    {formatBaht(lineTotal)}
+                    {formatBaht(itemDisplayedTotal)}
                   </Text>
                 </View>
 
-                {/* Per-size detail rows */}
-                {sizes.map((s) => {
-                  const sizeTotal = s.qty * unitPrice;
-                  return (
-                    <View key={`${i}-${s.size}`} style={qStyles.qSubRow}>
-                      <Text style={qStyles.qCellNo}></Text>
-                      <Text style={qStyles.qCellDescSub}>
-                        {"   ไซส์ "}
-                        {s.size}
-                      </Text>
-                      <Text style={qStyles.qCellQtySub}>{s.qty} ตัว</Text>
-                      <Text style={qStyles.qCellPriceSub}>
-                        {formatBaht(unitPrice)} / ตัว
-                      </Text>
-                      <Text style={qStyles.qCellTotalSub}>
-                        {formatBaht(sizeTotal)}
-                      </Text>
-                    </View>
-                  );
-                })}
+                {/* Per-size detail rows — adjusted unit price */}
+                {sizeRows.map((s) => (
+                  <View key={`${i}-${s.size}`} style={qStyles.qSubRow}>
+                    <Text style={qStyles.qCellNo}></Text>
+                    <Text style={qStyles.qCellDescSub}>
+                      {"   ไซส์ "}
+                      {s.size}
+                      {BIG_SIZES.has(s.size) && (
+                        <Text style={{ color: "#a16207", fontSize: 8 }}>
+                          {"  (ไซส์พิเศษ +"}
+                          {BIG_SIZE_SURCHARGE_PER_UNIT}
+                          {")"}
+                        </Text>
+                      )}
+                    </Text>
+                    <Text style={qStyles.qCellQtySub}>{s.qty} ตัว</Text>
+                    <Text style={qStyles.qCellPriceSub}>
+                      {formatBaht(s.adjUnitPrice)} / ตัว
+                    </Text>
+                    <Text style={qStyles.qCellTotalSub}>
+                      {formatBaht(s.sizeTotal)}
+                    </Text>
+                  </View>
+                ))}
               </React.Fragment>
             );
           })}
         </View>
 
-        {/* Summary */}
+        {/* Summary — รวมเป็นเงิน already includes 3XL+ surcharges
+            since they're absorbed into each row's unit price above. */}
         <View style={qStyles.qSummary}>
           <View style={qStyles.qSummaryRow}>
             <Text style={qStyles.qSummaryLabel}>รวมเป็นเงิน</Text>
             <Text style={qStyles.qSummaryValue}>
-              {formatBaht(subtotal)} บาท
+              {formatBaht(displayedSubtotal)} บาท
             </Text>
           </View>
-          {(order.sizeSurcharge ?? 0) > 0 && (
-            <View style={qStyles.qSummaryRow}>
-              <Text style={qStyles.qSummaryLabel}>
-                ค่าไซส์พิเศษ (3XL ขึ้นไป)
-              </Text>
-              <Text style={qStyles.qSummaryValue}>
-                + {formatBaht(order.sizeSurcharge ?? 0)} บาท
-              </Text>
-            </View>
-          )}
           {(order.dealerDiscount ?? 0) > 0 && (
             <View style={qStyles.qSummaryRow}>
               <Text style={qStyles.qSummaryLabel}>ส่วนลดตัวแทนจำหน่าย</Text>
