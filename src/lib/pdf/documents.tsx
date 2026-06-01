@@ -401,8 +401,13 @@ const qStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#000",
     paddingVertical: 6,
-    fontSize: 9,
-    fontWeight: "bold",
+    // Header text uses regular weight + slightly smaller font so the
+    // labels (especially "ราคาต่อหน่วย" and "จำนวนเงินรวมทั้งสิ้น")
+    // don't get clipped by their column widths. Bold Sarabun renders
+    // noticeably wider than Sarabun Regular at the same size.
+    fontSize: 8.5,
+    fontWeight: "normal",
+    color: "#000",
   },
   qHeadCell: {
     textAlign: "center",
@@ -474,7 +479,10 @@ const qStyles = StyleSheet.create({
   qSummary: {
     marginTop: 10,
     alignSelf: "flex-end",
-    width: 280,
+    // Wider container so long labels like "ภาษีมูลค่าเพิ่ม 0%" and
+    // "จำนวนเงินรวมทั้งสิ้น" render without their last syllable being
+    // pushed onto a second line.
+    width: 360,
   },
   qSummaryRow: {
     flexDirection: "row",
