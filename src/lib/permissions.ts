@@ -38,6 +38,7 @@ const ADMIN_SET: Permission[] = [
   "item:manage",
   "payment:record",
   "design:manage",
+  "stage:advance",
   "stage:assign",
   "audit:view",
   "material:manage",
