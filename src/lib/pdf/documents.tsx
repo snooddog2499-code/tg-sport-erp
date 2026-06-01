@@ -822,12 +822,13 @@ export function QuotationPDF({
             const title = it.collar
               ? `${it.garmentType} · ${it.collar}`.trim()
               : it.garmentType;
-            return (
-              <React.Fragment key={i}>
-                {/* Item header row — bold totals across the full width */}
-                <View
-                  style={[qStyles.qRow, { alignItems: "flex-start" }]}
-                >
+            const hasSizes = sizes.length > 0;
+
+            // No size breakdown — render the whole item as one row so
+            // จำนวน / ราคาต่อหน่วย / ยอดรวม still line up under the headers.
+            if (!hasSizes) {
+              return (
+                <View key={i} style={qStyles.qRow}>
                   <Text style={qStyles.qCellNo}>{i + 1}</Text>
                   <View style={qStyles.qCellDesc}>
                     <Text style={qStyles.qDescTitle}>{title}</Text>
@@ -838,23 +839,53 @@ export function QuotationPDF({
                     )}
                   </View>
                   <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
-                  <Text style={qStyles.qCellPrice}>{formatBaht(unitPrice)}</Text>
-                  <Text style={qStyles.qCellTotal}>{formatBaht(lineTotal)}</Text>
+                  <Text style={qStyles.qCellPrice}>
+                    {formatBaht(unitPrice)}
+                  </Text>
+                  <Text style={qStyles.qCellTotal}>
+                    {formatBaht(lineTotal)}
+                  </Text>
+                </View>
+              );
+            }
+
+            // Has size breakdown — title row holds only the title and
+            // a per-item subtotal at the right; each size below gets its
+            // own row with qty + price + total clearly columned so the
+            // operator can verify any line at a glance.
+            return (
+              <React.Fragment key={i}>
+                {/* Title row — title on the left, full subtotal on the right */}
+                <View style={qStyles.qRow}>
+                  <Text style={qStyles.qCellNo}>{i + 1}</Text>
+                  <View style={qStyles.qCellDesc}>
+                    <Text style={qStyles.qDescTitle}>{title}</Text>
+                    {it.note && (
+                      <Text style={qStyles.qDescNote}>
+                        หมายเหตุ: {it.note}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
+                  <Text style={qStyles.qCellPrice}></Text>
+                  <Text style={qStyles.qCellTotal}>
+                    {formatBaht(lineTotal)}
+                  </Text>
                 </View>
 
-                {/* Per-size breakdown — same column widths, indented */}
+                {/* Per-size detail rows */}
                 {sizes.map((s) => {
                   const sizeTotal = s.qty * unitPrice;
                   return (
                     <View key={`${i}-${s.size}`} style={qStyles.qSubRow}>
                       <Text style={qStyles.qCellNo}></Text>
                       <Text style={qStyles.qCellDescSub}>
-                        {"   • ไซส์ "}
+                        {"   ไซส์ "}
                         {s.size}
                       </Text>
                       <Text style={qStyles.qCellQtySub}>{s.qty} ตัว</Text>
                       <Text style={qStyles.qCellPriceSub}>
-                        {formatBaht(unitPrice)}
+                        {formatBaht(unitPrice)} / ตัว
                       </Text>
                       <Text style={qStyles.qCellTotalSub}>
                         {formatBaht(sizeTotal)}
@@ -878,7 +909,7 @@ export function QuotationPDF({
           {(order.sizeSurcharge ?? 0) > 0 && (
             <View style={qStyles.qSummaryRow}>
               <Text style={qStyles.qSummaryLabel}>
-                เพิ่มไซส์ใหญ่ (3XL+)
+                ค่าไซส์พิเศษ (3XL ขึ้นไป)
               </Text>
               <Text style={qStyles.qSummaryValue}>
                 + {formatBaht(order.sizeSurcharge ?? 0)} บาท
@@ -887,7 +918,7 @@ export function QuotationPDF({
           )}
           {(order.dealerDiscount ?? 0) > 0 && (
             <View style={qStyles.qSummaryRow}>
-              <Text style={qStyles.qSummaryLabel}>ส่วนลดตัวแทน</Text>
+              <Text style={qStyles.qSummaryLabel}>ส่วนลดตัวแทนจำหน่าย</Text>
               <Text style={qStyles.qSummaryValue}>
                 − {formatBaht(order.dealerDiscount ?? 0)} บาท
               </Text>
@@ -926,17 +957,28 @@ export function QuotationPDF({
         {/* Amount in words */}
         <Text style={qStyles.qInWords}>({bahtToThaiText(grandTotal)})</Text>
 
-        {/* Notes */}
-        {noteBody && (
-          <View style={qStyles.qNotes}>
-            <Text style={qStyles.qNotesHeader}>หมายเหตุ</Text>
-            {noteBody.split("\n").map((line, i) => (
-              <Text key={i} style={qStyles.qNoteLine}>
-                {line}
-              </Text>
-            ))}
-          </View>
-        )}
+        {/* Notes — order-specific notes (from order.notes) plus the
+            standard surcharge legend that matches the printed reference */}
+        <View style={qStyles.qNotes}>
+          <Text style={qStyles.qNotesHeader}>หมายเหตุ</Text>
+          {noteBody &&
+            noteBody.split("\n").map((line, i) =>
+              line.trim() ? (
+                <Text key={`n-${i}`} style={qStyles.qNoteLine}>
+                  {line}
+                </Text>
+              ) : null
+            )}
+          <Text style={qStyles.qNoteLine}>
+            ** ไซส์พิเศษ 3XL ขึ้นไป บวกเพิ่มตัวละ 30 บาท
+          </Text>
+          <Text style={qStyles.qNoteLine}>
+            ** แขนยาว บวกเพิ่มตัวละ 30 บาท
+          </Text>
+          <Text style={qStyles.qNoteLine}>
+            ** แขนกุด บวกเพิ่มตัวละ 20 บาท
+          </Text>
+        </View>
 
         {/* Footer */}
         <View style={qStyles.qFooter}>
