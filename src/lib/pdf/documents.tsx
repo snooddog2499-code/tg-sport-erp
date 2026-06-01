@@ -422,26 +422,6 @@ const qStyles = StyleSheet.create({
     color: "#000",
     fontWeight: "bold",
   },
-  qSizeList: { marginTop: 3 },
-  qSizeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 1,
-  },
-  qSizeBullet: {
-    width: 10,
-    fontSize: 9,
-    color: "#71717a",
-  },
-  qSizeLabel: {
-    width: 70,
-    fontSize: 9,
-    color: "#3f3f46",
-  },
-  qSizeQty: {
-    fontSize: 9,
-    color: "#000",
-  },
   qDescNote: {
     fontSize: 8,
     color: "#52525b",
@@ -455,6 +435,40 @@ const qStyles = StyleSheet.create({
     textAlign: "right",
     paddingHorizontal: 6,
     fontWeight: "bold",
+  },
+  // Per-size sub-rows: same column widths as the main row, indented
+  // and rendered in a softer tone so the eye treats them as detail.
+  qSubRow: {
+    flexDirection: "row",
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+    backgroundColor: "#fafafa",
+  },
+  qCellDescSub: {
+    flex: 1,
+    paddingHorizontal: 6,
+    fontSize: 9,
+    color: "#3f3f46",
+  },
+  qCellQtySub: {
+    width: 70,
+    paddingHorizontal: 4,
+    fontSize: 9,
+    color: "#000",
+  },
+  qCellPriceSub: {
+    width: 80,
+    textAlign: "right",
+    paddingHorizontal: 6,
+    fontSize: 9,
+    color: "#3f3f46",
+  },
+  qCellTotalSub: {
+    width: 80,
+    textAlign: "right",
+    paddingHorizontal: 6,
+    fontSize: 9,
+    color: "#000",
   },
   // Summary
   qSummary: {
@@ -802,42 +816,53 @@ export function QuotationPDF({
             </View>
           )}
           {items.map((it, i) => {
-            const lineTotal = it.qty * (it.unitPrice ?? 0);
+            const unitPrice = it.unitPrice ?? 0;
+            const lineTotal = it.qty * unitPrice;
             const sizes = sizeBreakdownEntries(it.sizeBreakdown);
             const title = it.collar
               ? `${it.garmentType} · ${it.collar}`.trim()
               : it.garmentType;
             return (
-              <View
-                style={[qStyles.qRow, { alignItems: "flex-start" }]}
-                key={i}
-              >
-                <Text style={qStyles.qCellNo}>{i + 1}</Text>
-                <View style={qStyles.qCellDesc}>
-                  <Text style={qStyles.qDescTitle}>{title}</Text>
-                  {sizes.length > 0 ? (
-                    <View style={qStyles.qSizeList}>
-                      {sizes.map((s) => (
-                        <View key={s.size} style={qStyles.qSizeRow}>
-                          <Text style={qStyles.qSizeBullet}>•</Text>
-                          <Text style={qStyles.qSizeLabel}>ไซส์ {s.size}</Text>
-                          <Text style={qStyles.qSizeQty}>
-                            {s.qty} ตัว
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                  {it.note && (
-                    <Text style={qStyles.qDescNote}>หมายเหตุ: {it.note}</Text>
-                  )}
+              <React.Fragment key={i}>
+                {/* Item header row — bold totals across the full width */}
+                <View
+                  style={[qStyles.qRow, { alignItems: "flex-start" }]}
+                >
+                  <Text style={qStyles.qCellNo}>{i + 1}</Text>
+                  <View style={qStyles.qCellDesc}>
+                    <Text style={qStyles.qDescTitle}>{title}</Text>
+                    {it.note && (
+                      <Text style={qStyles.qDescNote}>
+                        หมายเหตุ: {it.note}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
+                  <Text style={qStyles.qCellPrice}>{formatBaht(unitPrice)}</Text>
+                  <Text style={qStyles.qCellTotal}>{formatBaht(lineTotal)}</Text>
                 </View>
-                <Text style={qStyles.qCellQty}>{it.qty} ตัว</Text>
-                <Text style={qStyles.qCellPrice}>
-                  {formatBaht(it.unitPrice ?? 0)}
-                </Text>
-                <Text style={qStyles.qCellTotal}>{formatBaht(lineTotal)}</Text>
-              </View>
+
+                {/* Per-size breakdown — same column widths, indented */}
+                {sizes.map((s) => {
+                  const sizeTotal = s.qty * unitPrice;
+                  return (
+                    <View key={`${i}-${s.size}`} style={qStyles.qSubRow}>
+                      <Text style={qStyles.qCellNo}></Text>
+                      <Text style={qStyles.qCellDescSub}>
+                        {"   • ไซส์ "}
+                        {s.size}
+                      </Text>
+                      <Text style={qStyles.qCellQtySub}>{s.qty} ตัว</Text>
+                      <Text style={qStyles.qCellPriceSub}>
+                        {formatBaht(unitPrice)}
+                      </Text>
+                      <Text style={qStyles.qCellTotalSub}>
+                        {formatBaht(sizeTotal)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </React.Fragment>
             );
           })}
         </View>
