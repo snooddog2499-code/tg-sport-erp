@@ -420,7 +420,7 @@ const qStyles = StyleSheet.create({
     paddingVertical: 5,
     fontSize: 9,
   },
-  qCellNo: { width: 50, textAlign: "center", paddingHorizontal: 2 },
+  qCellNo: { width: 56, textAlign: "center", paddingHorizontal: 2 },
   qCellDesc: { flex: 1, paddingHorizontal: 6 },
   qDescTitle: {
     fontSize: 9,
@@ -434,11 +434,11 @@ const qStyles = StyleSheet.create({
     fontStyle: "normal",
   },
   qCellQty: { width: 70, paddingHorizontal: 6, fontWeight: "bold" },
-  qCellPrice: { width: 90, textAlign: "right", paddingHorizontal: 8 },
+  qCellPrice: { width: 100, textAlign: "right", paddingHorizontal: 6 },
   qCellTotal: {
-    width: 90,
+    width: 92,
     textAlign: "right",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     fontWeight: "bold",
   },
   // Per-size sub-rows: same column widths as the main row, indented
@@ -462,16 +462,16 @@ const qStyles = StyleSheet.create({
     color: "#000",
   },
   qCellPriceSub: {
-    width: 90,
+    width: 100,
     textAlign: "right",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     fontSize: 9,
     color: "#3f3f46",
   },
   qCellTotalSub: {
-    width: 90,
+    width: 92,
     textAlign: "right",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     fontSize: 9,
     color: "#000",
   },
@@ -479,16 +479,18 @@ const qStyles = StyleSheet.create({
   qSummary: {
     marginTop: 10,
     alignSelf: "flex-end",
-    // Wider container so long labels like "ภาษีมูลค่าเพิ่ม 0%" and
-    // "จำนวนเงินรวมทั้งสิ้น" render without their last syllable being
-    // pushed onto a second line.
-    width: 360,
+    // Wide enough that long Thai labels never wrap. Thai text doesn't
+    // use spaces, so when a label is too long for the container the
+    // wrap algorithm has to break mid-label and clips characters that
+    // end up off-axis. 480px gives the longest label
+    // ("จำนวนเงินรวมทั้งสิ้น" + "1,580.00 บาท") plenty of headroom.
+    width: 480,
   },
   qSummaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 3,
-    fontSize: 10,
+    fontSize: 9.5,
   },
   qSummaryLabel: { color: "#3f3f46" },
   qSummaryValue: { fontWeight: "bold", color: "#000" },
@@ -496,7 +498,7 @@ const qStyles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 6,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "bold",
     borderTopWidth: 1,
     borderTopColor: "#000",
